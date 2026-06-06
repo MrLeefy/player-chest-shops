@@ -1,18 +1,18 @@
 {
   "format_version": 2,
   "metadata": {
-		"authors": [
+    "authors": [
       "mrleefy"
-		]
-	},
+    ]
+  },
   "header": {
     "name": "ChestShop RES",
     "description": "",
-    "uuid": "15011ce5-0235-4228-8258-71a12c1ee28b",
+    "uuid": "84cca3f5-22f2-40ad-a833-8e7acf6bb032",
     "version": [
       3,
       0,
-      1
+      2
     ],
     "min_engine_version": [
       1,
@@ -23,7 +23,7 @@
   "modules": [
     {
       "type": "resources",
-      "uuid": "fd2e22fa-e555-4054-8208-f736a46dce0a",
+      "uuid": "2fc6a636-52fd-4941-826d-445de16f0d5c",
       "version": [
         1,
         0,

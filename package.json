@@ -1,6 +1,6 @@
 {
   "name": "player-chest-shops",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Secure Player Chest Shops addon for Minecraft Bedrock using Script API",
   "main": "index.js",
   "type": "module",
