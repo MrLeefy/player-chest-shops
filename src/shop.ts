@@ -871,14 +871,11 @@ world.beforeEvents.itemUse.subscribe(event => {
     const { source, itemStack } = event;
     if (!(source instanceof Player) || !itemStack) return;
 
-    if (itemStack.typeId === 'minecraft:stick' && itemStack.nameTag === 'Shop Configurator') {
+    // Crouch + regular stick + admin tag opens global currency config
+    if (itemStack.typeId === 'minecraft:stick' && source.isSneaking && source.hasTag(config.adminTag)) {
         event.cancel = true;
         system.run(() => {
-            if (source.hasTag(config.adminTag)) {
-                showCurrencyConfigurationForm(source);
-            } else {
-                source.sendMessage("§cYou must be an admin to configure the shop currency.");
-            }
+            showCurrencyConfigurationForm(source);
         });
     }
 });
