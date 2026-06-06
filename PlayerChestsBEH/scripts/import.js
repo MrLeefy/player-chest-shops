@@ -715,15 +715,47 @@ if ("pistonActivate" in world3.beforeEvents) {
       const attachedBlocks = pistonComp.getAttachedBlocks();
       for (const blockLoc of attachedBlocks) {
         const block = e.dimension.getBlock(blockLoc);
-        if (block && protectedBlockTypes.has(block.typeId)) {
-          const inventory = block.getComponent("inventory");
-          if (inventory && inventory.container) {
-            for (let i = 0; i < inventory.container.size; i++) {
-              const item = inventory.container.getItem(i);
-              if (item?.typeId === "je:chest_lock_2") {
-                e.cancel = true;
-                return;
+        if (block) {
+          if (protectedBlockTypes.has(block.typeId)) {
+            const inventory = block.getComponent("inventory");
+            if (inventory && inventory.container) {
+              for (let i = 0; i < inventory.container.size; i++) {
+                const item = inventory.container.getItem(i);
+                if (item?.typeId === "je:chest_lock_2") {
+                  e.cancel = true;
+                  return;
+                }
               }
+            }
+          }
+          if (block.typeId.endsWith("sign")) {
+            const signComp = block.getComponent("sign");
+            const text = signComp?.getText();
+            if (text && text.includes("||")) {
+              e.cancel = true;
+              return;
+            }
+          }
+          const directions = [
+            { x: 0, y: 1, z: 0 },
+            { x: 0, y: -1, z: 0 },
+            { x: 1, y: 0, z: 0 },
+            { x: -1, y: 0, z: 0 },
+            { x: 0, y: 0, z: 1 },
+            { x: 0, y: 0, z: -1 }
+          ];
+          for (const offset of directions) {
+            try {
+              const adjBlock = e.dimension.getBlock({ x: blockLoc.x + offset.x, y: blockLoc.y + offset.y, z: blockLoc.z + offset.z });
+              if (adjBlock && adjBlock.typeId.endsWith("sign")) {
+                const signComp = adjBlock.getComponent("sign");
+                const text = signComp?.getText();
+                if (text && text.includes("||")) {
+                  e.cancel = true;
+                  return;
+                }
+              }
+            } catch {
             }
           }
         }
@@ -745,11 +777,23 @@ world3.beforeEvents.playerBreakBlock.subscribe((a) => {
       if (lines[0] && lines[0].includes("||")) {
         const ownerName = lines[0].substring(lines[0].indexOf(`|`) + 1).replace(/[|]/g, "").trim();
         const isShopSign = text.includes(config_default.currencySymbol) || config_default.currencyType === "item" && text.includes(iName(config_default.currency));
-        if (isShopSign && player.name !== ownerName && !player.hasTag(config_default.adminTag)) {
-          a.cancel = true;
-          system2.runTimeout(() => {
-            player.onScreenDisplay.setActionBar("\xA7cYou can't break this sign.\n\xA7eInteract to refresh shop");
-          }, 1);
+        if (isShopSign) {
+          if (player.name !== ownerName && !player.hasTag(config_default.adminTag)) {
+            a.cancel = true;
+            system2.runTimeout(() => {
+              player.onScreenDisplay.setActionBar("\xA7cYou can't break this sign.\n\xA7eInteract to refresh shop");
+            }, 1);
+          } else {
+            try {
+              const currentCount = getScore(ownerName, "signC");
+              if (currentCount > 0) {
+                setScore(ownerName, "signC", currentCount - 1);
+              }
+              player.sendMessage("\uE200 \xA7aShop sign broken and shop count slot cleared.\xA7r");
+            } catch (e) {
+              console.warn(`Failed to decrement shop count for ${ownerName}: ${e}`);
+            }
+          }
         }
       }
     }
@@ -1058,8 +1102,8 @@ Price per item`, "Type your price here", "10").then((e) => {
                 return;
               let priceStr = e.formValues[0];
               let price = Math.round(Math.abs(parseFloat(priceStr.replace(",", ""))));
-              if (price > 2147483647 || isNaN(price)) {
-                player.sendMessage("\uE201 \xA7cInvalid price!\xA7r");
+              if (price > 2147483647 || isNaN(price) || price <= 0) {
+                player.sendMessage("\uE201 \xA7cPrice must be a positive number greater than 0!\xA7r");
                 player.playSound("note.bass");
                 return;
               }
@@ -1176,8 +1220,11 @@ Price ${config_default.currencySymbol}`, "Type your price here", "10").then((e) 
                   return;
                 let priceStr = e.formValues[0];
                 let price = Math.round(Math.abs(parseFloat(priceStr.replace(",", ""))));
-                if (price > 2147483647 || isNaN(price))
+                if (price > 2147483647 || isNaN(price) || price <= 0) {
+                  player.sendMessage("\uE201 \xA7cPrice must be a positive number greater than 0!\xA7r");
+                  player.playSound("note.bass");
                   return;
+                }
                 const priceDisplay = config_default.currencyType === "item" ? `${price}x ${iName(config_default.currency)}` : `${config_default.currencySymbol}${price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
                 split[2] = `${priceDisplay}\xA7r`;
                 content.setText(split.join("\n"));
@@ -1229,6 +1276,14 @@ Price ${config_default.currencySymbol}`, "Type your price here", "10").then((e) 
               const g_res = await g.show(player);
               if (g_res.canceled || g_res.selection == 0)
                 return;
+              try {
+                const currentCount = getScore(ownerName, "signC");
+                if (currentCount > 0) {
+                  setScore(ownerName, "signC", currentCount - 1);
+                }
+              } catch (e) {
+                console.warn(`Failed to decrement shop count on UI deletion: ${e}`);
+              }
               block.setType("minecraft:air");
               player.playSound("random.levelup", { pitch: 2 });
               player.sendMessage("\uE200 \xA7aSign successfully deleted.\xA7r");

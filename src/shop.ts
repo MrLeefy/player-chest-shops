@@ -196,8 +196,8 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                             if (e.canceled || !e.formValues) return;
                             let priceStr = e.formValues[0] as string;
                             let price = Math.round(Math.abs(parseFloat(priceStr.replace(',', ''))));
-                            if (price > 2147483647 || isNaN(price)) {
-                                player.sendMessage(' §cInvalid price!§r');
+                            if (price > 2147483647 || isNaN(price) || price <= 0) {
+                                player.sendMessage(' §cPrice must be a positive number greater than 0!§r');
                                 player.playSound('note.bass');
                                 return;
                             }
@@ -300,7 +300,11 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                                 if (e.canceled || !e.formValues) return; 
                                 let priceStr = e.formValues[0] as string; 
                                 let price = Math.round(Math.abs(parseFloat(priceStr.replace(',', ''))));
-                                if (price > 2147483647 || isNaN(price)) return;
+                                if (price > 2147483647 || isNaN(price) || price <= 0) {
+                                    player.sendMessage(' §cPrice must be a positive number greater than 0!§r');
+                                    player.playSound('note.bass');
+                                    return;
+                                }
                                 const priceDisplay = config.currencyType === 'item' ? `${price}x ${iName(config.currency)}` : `${config.currencySymbol}${price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
                                 split[2] = `${priceDisplay}§r`;
                                 content.setText(split.join('\n'));
@@ -349,6 +353,16 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                             let g = new MessageFormData().title('§c§lDelete Shop').body('\n§rAre you sure you want to remove this shop?').button1('Cancel').button2('Delete');
                             const g_res = await g.show(player);
                             if (g_res.canceled || g_res.selection == 0) return;
+                            
+                            try {
+                                const currentCount = getScore(ownerName, 'signC');
+                                if (currentCount > 0) {
+                                    setScore(ownerName, 'signC', currentCount - 1);
+                                }
+                            } catch (e) {
+                                console.warn(`Failed to decrement shop count on UI deletion: ${e}`);
+                            }
+
                             block.setType('minecraft:air');
                             player.playSound('random.levelup', { pitch: 2 });
                             player.sendMessage(' §aSign successfully deleted.§r');

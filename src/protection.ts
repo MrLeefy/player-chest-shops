@@ -1,6 +1,6 @@
 import { world, system, Player, ItemStack, Vector3, Block, Dimension } from '@minecraft/server';
 import config from './config';
-import { iName } from './utility';
+import { iName, getScore, setScore } from './utility';
 
 const protectedBlockTypes = new Set<string>(config.containers);
 
@@ -97,8 +97,7 @@ world.beforeEvents.explosion.subscribe(e => {
     }
 });
 
-// 3. PISTON ACTIVATION PROTECTION (BLOCK PISTON MOVEMENT OF LOCKED CHESTS)
-// Moved to world.beforeEvents.pistonActivate for proper cancelation support.
+// 3. PISTON ACTIVATION PROTECTION (BLOCK PISTON MOVEMENT OF LOCKED CHESTS & SIGN SHOPS)
 if ('pistonActivate' in world.beforeEvents) {
     (world.beforeEvents as any).pistonActivate.subscribe((e: any) => {
         const pistonComp = e.piston.getComponent('piston') as any;
@@ -108,17 +107,49 @@ if ('pistonActivate' in world.beforeEvents) {
             const attachedBlocks = pistonComp.getAttachedBlocks();
             for (const blockLoc of attachedBlocks) {
                 const block = e.dimension.getBlock(blockLoc);
-                if (block && protectedBlockTypes.has(block.typeId)) {
-                    // Check if the block has a lock item inside
-                    const inventory = block.getComponent('inventory') as any;
-                    if (inventory && inventory.container) {
-                        for (let i = 0; i < inventory.container.size; i++) {
-                            const item = inventory.container.getItem(i);
-                            if (item?.typeId === 'je:chest_lock_2') {
-                                e.cancel = true;
-                                return;
+                if (block) {
+                    // 1. If it is a container, check if locked
+                    if (protectedBlockTypes.has(block.typeId)) {
+                        const inventory = block.getComponent('inventory') as any;
+                        if (inventory && inventory.container) {
+                            for (let i = 0; i < inventory.container.size; i++) {
+                                const item = inventory.container.getItem(i);
+                                if (item?.typeId === 'je:chest_lock_2') {
+                                    e.cancel = true;
+                                    return;
+                                }
                             }
                         }
+                    }
+                    
+                    // 2. If it is a sign, check if it's a shop sign
+                    if (block.typeId.endsWith('sign')) {
+                        const signComp = block.getComponent('sign') as any;
+                        const text = signComp?.getText();
+                        if (text && text.includes('||')) {
+                            e.cancel = true;
+                            return;
+                        }
+                    }
+
+                    // 3. Check adjacent blocks to see if we are pushing a block supporting a shop sign
+                    const directions = [
+                        { x: 0, y: 1, z: 0 }, { x: 0, y: -1, z: 0 },
+                        { x: 1, y: 0, z: 0 }, { x: -1, y: 0, z: 0 },
+                        { x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 }
+                    ];
+                    for (const offset of directions) {
+                        try {
+                            const adjBlock = e.dimension.getBlock({ x: blockLoc.x + offset.x, y: blockLoc.y + offset.y, z: blockLoc.z + offset.z });
+                            if (adjBlock && adjBlock.typeId.endsWith('sign')) {
+                                const signComp = adjBlock.getComponent('sign') as any;
+                                const text = signComp?.getText();
+                                if (text && text.includes('||')) {
+                                    e.cancel = true;
+                                    return;
+                                }
+                            }
+                        } catch {}
                     }
                 }
             }
@@ -144,11 +175,25 @@ world.beforeEvents.playerBreakBlock.subscribe(a => {
                 const ownerName = lines[0].substring(lines[0].indexOf(`|`) + 1).replace(/[|]/g, '').trim();
                 const isShopSign = text.includes(config.currencySymbol) || (config.currencyType === 'item' && text.includes(iName(config.currency)));
                 
-                if (isShopSign && player.name !== ownerName && !player.hasTag(config.adminTag)) {
-                    a.cancel = true;
-                    system.runTimeout(() => {
-                        player.onScreenDisplay.setActionBar('§cYou can\'t break this sign.\n§eInteract to refresh shop');
-                    }, 1);
+                if (isShopSign) {
+                    if (player.name !== ownerName && !player.hasTag(config.adminTag)) {
+                        a.cancel = true;
+                        system.runTimeout(() => {
+                            player.onScreenDisplay.setActionBar('§cYou can\'t break this sign.\n§eInteract to refresh shop');
+                        }, 1);
+                    } else {
+                        // The owner or an admin is breaking their own shop sign!
+                        // Let's decrement their shop count score.
+                        try {
+                            const currentCount = getScore(ownerName, 'signC');
+                            if (currentCount > 0) {
+                                setScore(ownerName, 'signC', currentCount - 1);
+                            }
+                            player.sendMessage(' §aShop sign broken and shop count slot cleared.§r');
+                        } catch (e) {
+                            console.warn(`Failed to decrement shop count for ${ownerName}: ${e}`);
+                        }
+                    }
                 }
             }
         }
