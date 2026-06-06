@@ -564,16 +564,31 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                             const newStock = Object.values(newCont).reduce((a, b) => a + b, 0);
 
                             // Charge the buyer
-                            if (config.currencyType === 'scoreboard') {
-                                subtractScore(player, config.currency, total);
-                            } else { 
-                                try { 
-                                    player.dimension.runCommand(`clear "${player.name}" ${config.currency} 0 ${total}`); 
-                                } catch(e) { 
-                                    console.warn(`Failed to clear items: ${e}`);
-                                    return;
-                                }
-                            }
+                             if (config.currencyType === 'scoreboard') {
+                                 subtractScore(player, config.currency, total);
+                             } else { 
+                                 // Native inventory clear logic to prevent command-injection/escaping failures with player names
+                                 let amountToClear = total;
+                                 for (let slotIndex = 0; slotIndex < inv.size; slotIndex++) {
+                                     const item = inv.getItem(slotIndex);
+                                     if (item && item.typeId === config.currency) {
+                                         if (item.amount > amountToClear) {
+                                             item.amount -= amountToClear;
+                                             inv.setItem(slotIndex, item);
+                                             amountToClear = 0;
+                                             break;
+                                         } else {
+                                             amountToClear -= item.amount;
+                                             inv.setItem(slotIndex, undefined);
+                                         }
+                                     }
+                                 }
+                                 if (amountToClear > 0) {
+                                     player.sendMessage(` §cTransaction failed. Inventory synchronization error.§r`);
+                                     player.playSound('note.bass');
+                                     return;
+                                 }
+                             }
                         
                             // Perform container transfer
                             for (const iStr in objContainer) {
@@ -624,7 +639,13 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                                 if (owner) {
                                     const ownerInvComp = owner.getComponent('inventory') as any;
                                     if (ownerInvComp && ownerInvComp.container) {
-                                        ownerInvComp.container.addItem(new ItemStack(config.currency, total));
+                                        const leftover = ownerInvComp.container.addItem(new ItemStack(config.currency, total));
+                                        if (leftover && leftover.amount > 0) {
+                                            let salesData = offlineSalesDB.get(ownerName) ?? {};
+                                            salesData[config.currency] = (salesData[config.currency] || 0) + leftover.amount;
+                                            offlineSalesDB.set(ownerName, salesData);
+                                            owner.sendMessage(`§cYour inventory was full! §f${leftover.amount}x ${currencyItemName} §cwas sent to your offline sales bank.`);
+                                        }
                                     }
                                     owner.playSound('random.orb');
                                     owner.sendMessage(` §o§e${player.name}§7 bought §f${amount}§bx§f ${iname}§7 from your shop.§r\n §7You received §a+§f${total}x ${currencyItemName}§r`);

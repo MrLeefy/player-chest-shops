@@ -1,14 +1,9 @@
-import { world, Entity, ScoreboardIdentity, system, Vector3 } from '@minecraft/server';
+import { world, Entity, ScoreboardIdentity, system } from '@minecraft/server';
 
 export function getScore(participant: Entity | ScoreboardIdentity | string, objectiveId: string): number {
     try {
         const objective = world.scoreboard.getObjective(objectiveId);
         if (!objective) return 0;
-        
-        if (typeof participant === 'string') {
-            const part = objective.getParticipants().find(p => p.displayName === participant);
-            return part ? objective.getScore(part) ?? 0 : 0;
-        }
         return objective.getScore(participant) ?? 0;
     } catch {
         return 0;
@@ -18,43 +13,13 @@ export function getScore(participant: Entity | ScoreboardIdentity | string, obje
 export function setScore(participant: Entity | ScoreboardIdentity | string, objectiveId: string, score: number): void {
     const objective = world.scoreboard.getObjective(objectiveId);
     if (!objective) throw new Error(`Objective ${objectiveId} not found`);
-
-    if (typeof participant === 'string') {
-        const part = objective.getParticipants().find(p => p.displayName === participant) 
-                     || objective.getParticipants().find(p => p.displayName === participant); // Fallback
-        if (part) {
-            objective.setScore(part, score);
-        } else {
-            // In modern Bedrock, you can run a command to set score for offline player
-            try {
-                world.getDimension('overworld').runCommand(`scoreboard players set "${participant}" "${objectiveId}" ${score}`);
-            } catch (e) {
-                console.warn(`Failed to set score for offline player ${participant}: ${e}`);
-            }
-        }
-    } else {
-        objective.setScore(participant, score);
-    }
+    objective.setScore(participant, score);
 }
 
 export function addScore(participant: Entity | ScoreboardIdentity | string, objectiveId: string, score: number): void {
     const objective = world.scoreboard.getObjective(objectiveId);
     if (!objective) throw new Error(`Objective ${objectiveId} not found`);
-
-    if (typeof participant === 'string') {
-        const part = objective.getParticipants().find(p => p.displayName === participant);
-        if (part) {
-            objective.addScore(part, score);
-        } else {
-            try {
-                world.getDimension('overworld').runCommand(`scoreboard players add "${participant}" "${objectiveId}" ${score}`);
-            } catch (e) {
-                console.warn(`Failed to add score for offline player ${participant}: ${e}`);
-            }
-        }
-    } else {
-        objective.addScore(participant, score);
-    }
+    objective.addScore(participant, score);
 }
 
 export function subtractScore(participant: Entity | ScoreboardIdentity | string, objectiveId: string, score: number): void {
@@ -65,15 +30,7 @@ export function subtractScore(participant: Entity | ScoreboardIdentity | string,
 export function resetScore(participant: Entity | ScoreboardIdentity | string, objectiveId: string): void {
     const objective = world.scoreboard.getObjective(objectiveId);
     if (!objective) throw new Error(`Objective ${objectiveId} not found`);
-
-    if (typeof participant === 'string') {
-        const part = objective.getParticipants().find(p => p.displayName === participant);
-        if (part) {
-            objective.removeParticipant(part);
-        }
-    } else {
-        objective.removeParticipant(participant);
-    }
+    objective.removeParticipant(participant);
 }
 
 /**

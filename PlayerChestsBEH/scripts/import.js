@@ -215,10 +215,6 @@ function getScore(participant, objectiveId) {
     const objective = world2.scoreboard.getObjective(objectiveId);
     if (!objective)
       return 0;
-    if (typeof participant === "string") {
-      const part = objective.getParticipants().find((p) => p.displayName === participant);
-      return part ? objective.getScore(part) ?? 0 : 0;
-    }
     return objective.getScore(participant) ?? 0;
   } catch {
     return 0;
@@ -228,39 +224,13 @@ function setScore(participant, objectiveId, score) {
   const objective = world2.scoreboard.getObjective(objectiveId);
   if (!objective)
     throw new Error(`Objective ${objectiveId} not found`);
-  if (typeof participant === "string") {
-    const part = objective.getParticipants().find((p) => p.displayName === participant) || objective.getParticipants().find((p) => p.displayName === participant);
-    if (part) {
-      objective.setScore(part, score);
-    } else {
-      try {
-        world2.getDimension("overworld").runCommand(`scoreboard players set "${participant}" "${objectiveId}" ${score}`);
-      } catch (e) {
-        console.warn(`Failed to set score for offline player ${participant}: ${e}`);
-      }
-    }
-  } else {
-    objective.setScore(participant, score);
-  }
+  objective.setScore(participant, score);
 }
 function addScore(participant, objectiveId, score) {
   const objective = world2.scoreboard.getObjective(objectiveId);
   if (!objective)
     throw new Error(`Objective ${objectiveId} not found`);
-  if (typeof participant === "string") {
-    const part = objective.getParticipants().find((p) => p.displayName === participant);
-    if (part) {
-      objective.addScore(part, score);
-    } else {
-      try {
-        world2.getDimension("overworld").runCommand(`scoreboard players add "${participant}" "${objectiveId}" ${score}`);
-      } catch (e) {
-        console.warn(`Failed to add score for offline player ${participant}: ${e}`);
-      }
-    }
-  } else {
-    objective.addScore(participant, score);
-  }
+  objective.addScore(participant, score);
 }
 function subtractScore(participant, objectiveId, score) {
   const previousScore = getScore(participant, objectiveId);
@@ -270,14 +240,7 @@ function resetScore(participant, objectiveId) {
   const objective = world2.scoreboard.getObjective(objectiveId);
   if (!objective)
     throw new Error(`Objective ${objectiveId} not found`);
-  if (typeof participant === "string") {
-    const part = objective.getParticipants().find((p) => p.displayName === participant);
-    if (part) {
-      objective.removeParticipant(part);
-    }
-  } else {
-    objective.removeParticipant(participant);
-  }
+  objective.removeParticipant(participant);
 }
 function setTimeout(callback, delayMs) {
   const ticks = Math.max(1, Math.round(delayMs / 50));
@@ -1440,10 +1403,24 @@ How many do you want to buy?`;
               if (config_default.currencyType === "scoreboard") {
                 subtractScore(player, config_default.currency, total);
               } else {
-                try {
-                  player.dimension.runCommand(`clear "${player.name}" ${config_default.currency} 0 ${total}`);
-                } catch (e) {
-                  console.warn(`Failed to clear items: ${e}`);
+                let amountToClear = total;
+                for (let slotIndex = 0; slotIndex < inv.size; slotIndex++) {
+                  const item = inv.getItem(slotIndex);
+                  if (item && item.typeId === config_default.currency) {
+                    if (item.amount > amountToClear) {
+                      item.amount -= amountToClear;
+                      inv.setItem(slotIndex, item);
+                      amountToClear = 0;
+                      break;
+                    } else {
+                      amountToClear -= item.amount;
+                      inv.setItem(slotIndex, void 0);
+                    }
+                  }
+                }
+                if (amountToClear > 0) {
+                  player.sendMessage(`\uE201 \xA7cTransaction failed. Inventory synchronization error.\xA7r`);
+                  player.playSound("note.bass");
                   return;
                 }
               }
@@ -1489,7 +1466,13 @@ How many do you want to buy?`;
                 if (owner) {
                   const ownerInvComp = owner.getComponent("inventory");
                   if (ownerInvComp && ownerInvComp.container) {
-                    ownerInvComp.container.addItem(new ItemStack2(config_default.currency, total));
+                    const leftover = ownerInvComp.container.addItem(new ItemStack2(config_default.currency, total));
+                    if (leftover && leftover.amount > 0) {
+                      let salesData = offlineSalesDB.get(ownerName) ?? {};
+                      salesData[config_default.currency] = (salesData[config_default.currency] || 0) + leftover.amount;
+                      offlineSalesDB.set(ownerName, salesData);
+                      owner.sendMessage(`\xA7cYour inventory was full! \xA7f${leftover.amount}x ${currencyItemName} \xA7cwas sent to your offline sales bank.`);
+                    }
                   }
                   owner.playSound("random.orb");
                   owner.sendMessage(`\uE200 \xA7o\xA7e${player.name}\xA77 bought \xA7f${amount}\xA7bx\xA7f ${iname}\xA77 from your shop.\xA7r
