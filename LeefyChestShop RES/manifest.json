@@ -6,13 +6,13 @@
 		]
 	},
 	"header": {
-		"name": "LeefyChestShop v2.2.5 RES",
-		"description": "LeefyChestShop Resource Pack v2.2.5 - Production Release - Jun 2026 Update",
-		"uuid": "22746e24-e6db-4110-a88b-3e6f3c55dd51",
+		"name": "LeefyChestShop v2.2.6 RES",
+		"description": "LeefyChestShop Resource Pack v2.2.6 - Production Release - Jun 2026 Update",
+		"uuid": "c64885e0-964c-4ead-a7ff-a1bb8cf60c69",
 		"version": [
 			2,
 			2,
-			5
+			6
 		],
 		"min_engine_version": [
 			1,
@@ -23,11 +23,11 @@
 	"modules": [
 		{
 			"type": "resources",
-			"uuid": "4409aed1-a22c-4818-b0a7-e17141f8ad3d",
+			"uuid": "e5deb022-ffcf-4ad0-8e21-b08e1ad1e01c",
 			"version": [
 				2,
 				2,
-				5
+				6
 			]
 		}
 	]
