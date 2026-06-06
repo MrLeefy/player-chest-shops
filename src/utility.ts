@@ -1,4 +1,4 @@
-import { world, Entity, ScoreboardIdentity, system } from '@minecraft/server';
+import { world, Entity, ScoreboardIdentity, system, Player } from '@minecraft/server';
 
 export function getScore(participant: Entity | ScoreboardIdentity | string, objectiveId: string): number {
     try {
@@ -11,27 +11,86 @@ export function getScore(participant: Entity | ScoreboardIdentity | string, obje
 }
 
 export function setScore(participant: Entity | ScoreboardIdentity | string, objectiveId: string, score: number): void {
-    const objective = world.scoreboard.getObjective(objectiveId);
-    if (!objective) throw new Error(`Objective ${objectiveId} not found`);
-    objective.setScore(participant, score);
+    try {
+        const objective = world.scoreboard.getObjective(objectiveId);
+        if (!objective) return;
+        objective.setScore(participant, score);
+    } catch (err) {
+        try {
+            if (participant instanceof Player) {
+                participant.runCommand(`scoreboard players set @s ${objectiveId} ${score}`);
+            } else if (typeof participant === 'string') {
+                world.getDimension('overworld').runCommand(`scoreboard players set "${participant}" ${objectiveId} ${score}`);
+            } else if (typeof (participant as any).name === 'string') {
+                world.getDimension('overworld').runCommand(`scoreboard players set "${(participant as any).name}" ${objectiveId} ${score}`);
+            }
+        } catch (cmdErr) {
+            console.warn(`[Shop Scoreboard] Failed to set score for ${objectiveId}: ${cmdErr}`);
+        }
+    }
 }
 
 export function addScore(participant: Entity | ScoreboardIdentity | string, objectiveId: string, score: number): void {
-    const objective = world.scoreboard.getObjective(objectiveId);
-    if (!objective) throw new Error(`Objective ${objectiveId} not found`);
-    objective.addScore(participant, score);
+    try {
+        const objective = world.scoreboard.getObjective(objectiveId);
+        if (!objective) return;
+        objective.addScore(participant, score);
+    } catch (err) {
+        try {
+            if (participant instanceof Player) {
+                participant.runCommand(`scoreboard players add @s ${objectiveId} ${score}`);
+            } else if (typeof participant === 'string') {
+                world.getDimension('overworld').runCommand(`scoreboard players add "${participant}" ${objectiveId} ${score}`);
+            } else if (typeof (participant as any).name === 'string') {
+                world.getDimension('overworld').runCommand(`scoreboard players add "${(participant as any).name}" ${objectiveId} ${score}`);
+            }
+        } catch (cmdErr) {
+            console.warn(`[Shop Scoreboard] Failed to add score for ${objectiveId}: ${cmdErr}`);
+        }
+    }
 }
 
 export function subtractScore(participant: Entity | ScoreboardIdentity | string, objectiveId: string, score: number): void {
-    const previousScore = getScore(participant, objectiveId);
-    setScore(participant, objectiveId, previousScore - score);
+    try {
+        const objective = world.scoreboard.getObjective(objectiveId);
+        if (!objective) return;
+        try {
+            const previousScore = objective.getScore(participant) ?? 0;
+            objective.setScore(participant, previousScore - score);
+        } catch {
+            if (participant instanceof Player) {
+                participant.runCommand(`scoreboard players remove @s ${objectiveId} ${score}`);
+            } else if (typeof participant === 'string') {
+                world.getDimension('overworld').runCommand(`scoreboard players remove "${participant}" ${objectiveId} ${score}`);
+            } else if (typeof (participant as any).name === 'string') {
+                world.getDimension('overworld').runCommand(`scoreboard players remove "${(participant as any).name}" ${objectiveId} ${score}`);
+            }
+        }
+    } catch (err) {
+        console.warn(`[Shop Scoreboard] Failed to subtract score for ${objectiveId}: ${err}`);
+    }
 }
 
 export function resetScore(participant: Entity | ScoreboardIdentity | string, objectiveId: string): void {
-    const objective = world.scoreboard.getObjective(objectiveId);
-    if (!objective) throw new Error(`Objective ${objectiveId} not found`);
-    objective.removeParticipant(participant);
+    try {
+        const objective = world.scoreboard.getObjective(objectiveId);
+        if (!objective) return;
+        objective.removeParticipant(participant);
+    } catch (err) {
+        try {
+            if (participant instanceof Player) {
+                participant.runCommand(`scoreboard players reset @s ${objectiveId}`);
+            } else if (typeof participant === 'string') {
+                world.getDimension('overworld').runCommand(`scoreboard players reset "${participant}" ${objectiveId}`);
+            } else if (typeof (participant as any).name === 'string') {
+                world.getDimension('overworld').runCommand(`scoreboard players reset "${(participant as any).name}" ${objectiveId}`);
+            }
+        } catch (cmdErr) {
+            // Ignore
+        }
+    }
 }
+
 
 /**
  * Replaces the CPU-heavy busy-wait loop with a native, non-blocking system timer.

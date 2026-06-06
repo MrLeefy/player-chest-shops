@@ -58,24 +58,34 @@ system.runTimeout(() => {
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     if (!initialSpawn) return;
     
-    // Set default rank shop limit if not set
-    setScore(player, 'rank', config.shopLimit);
-    
-    const fP = world.scoreboard.getParticipants().find(p => p.type === 'FakePlayer' && p.displayName === player.name);
-    if (!fP) return;
-    
-    if (config.currencyType === 'scoreboard') {
-        const add = getScore(fP, config.currency);
-        if (!add) return;
-        
-        addScore(player, config.currency, add);
-        resetScore(fP, config.currency);
-        
-        setTimeout(() => {
-            if (player.isValid()) {
-                player.sendMessage(` §7§oYou earned §e${config.currencySymbol}§f${add.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')} §7from your shops while you were away!§r`);
-                player.playSound('random.levelup', { pitch: 2 });
+    // Delay execution by 20 ticks (1 second) to allow network profile/identity to resolve
+    system.runTimeout(() => {
+        try {
+            if (!player.isValid()) return;
+            
+            // Set default rank shop limit if not set
+            setScore(player, 'rank', config.shopLimit);
+            
+            const fP = world.scoreboard.getParticipants().find(p => p.type === 'FakePlayer' && p.displayName === player.name);
+            if (!fP) return;
+            
+            if (config.currencyType === 'scoreboard') {
+                const add = getScore(fP, config.currency);
+                if (!add) return;
+                
+                addScore(player, config.currency, add);
+                resetScore(fP, config.currency);
+                
+                setTimeout(() => {
+                    if (player.isValid()) {
+                        player.sendMessage(` §7§oYou earned §e${config.currencySymbol}§f${add.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')} §7from your shops while you were away!§r`);
+                        player.playSound('random.levelup', { pitch: 2 });
+                    }
+                }, 5000);
             }
-        }, 5000);
-    }
+        } catch (error) {
+            console.warn(`[Shop Spawn] Error handling player spawn: ${error}`);
+        }
+    }, 20);
 });
+

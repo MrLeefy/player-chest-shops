@@ -221,7 +221,7 @@ var Database = class {
 };
 
 // src/utility.ts
-import { world as world2, system } from "@minecraft/server";
+import { world as world2, system, Player } from "@minecraft/server";
 function getScore(participant, objectiveId) {
   try {
     const objective = world2.scoreboard.getObjective(objectiveId);
@@ -233,26 +233,84 @@ function getScore(participant, objectiveId) {
   }
 }
 function setScore(participant, objectiveId, score) {
-  const objective = world2.scoreboard.getObjective(objectiveId);
-  if (!objective)
-    throw new Error(`Objective ${objectiveId} not found`);
-  objective.setScore(participant, score);
+  try {
+    const objective = world2.scoreboard.getObjective(objectiveId);
+    if (!objective)
+      return;
+    objective.setScore(participant, score);
+  } catch (err) {
+    try {
+      if (participant instanceof Player) {
+        participant.runCommand(`scoreboard players set @s ${objectiveId} ${score}`);
+      } else if (typeof participant === "string") {
+        world2.getDimension("overworld").runCommand(`scoreboard players set "${participant}" ${objectiveId} ${score}`);
+      } else if (typeof participant.name === "string") {
+        world2.getDimension("overworld").runCommand(`scoreboard players set "${participant.name}" ${objectiveId} ${score}`);
+      }
+    } catch (cmdErr) {
+      console.warn(`[Shop Scoreboard] Failed to set score for ${objectiveId}: ${cmdErr}`);
+    }
+  }
 }
 function addScore(participant, objectiveId, score) {
-  const objective = world2.scoreboard.getObjective(objectiveId);
-  if (!objective)
-    throw new Error(`Objective ${objectiveId} not found`);
-  objective.addScore(participant, score);
+  try {
+    const objective = world2.scoreboard.getObjective(objectiveId);
+    if (!objective)
+      return;
+    objective.addScore(participant, score);
+  } catch (err) {
+    try {
+      if (participant instanceof Player) {
+        participant.runCommand(`scoreboard players add @s ${objectiveId} ${score}`);
+      } else if (typeof participant === "string") {
+        world2.getDimension("overworld").runCommand(`scoreboard players add "${participant}" ${objectiveId} ${score}`);
+      } else if (typeof participant.name === "string") {
+        world2.getDimension("overworld").runCommand(`scoreboard players add "${participant.name}" ${objectiveId} ${score}`);
+      }
+    } catch (cmdErr) {
+      console.warn(`[Shop Scoreboard] Failed to add score for ${objectiveId}: ${cmdErr}`);
+    }
+  }
 }
 function subtractScore(participant, objectiveId, score) {
-  const previousScore = getScore(participant, objectiveId);
-  setScore(participant, objectiveId, previousScore - score);
+  try {
+    const objective = world2.scoreboard.getObjective(objectiveId);
+    if (!objective)
+      return;
+    try {
+      const previousScore = objective.getScore(participant) ?? 0;
+      objective.setScore(participant, previousScore - score);
+    } catch {
+      if (participant instanceof Player) {
+        participant.runCommand(`scoreboard players remove @s ${objectiveId} ${score}`);
+      } else if (typeof participant === "string") {
+        world2.getDimension("overworld").runCommand(`scoreboard players remove "${participant}" ${objectiveId} ${score}`);
+      } else if (typeof participant.name === "string") {
+        world2.getDimension("overworld").runCommand(`scoreboard players remove "${participant.name}" ${objectiveId} ${score}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[Shop Scoreboard] Failed to subtract score for ${objectiveId}: ${err}`);
+  }
 }
 function resetScore(participant, objectiveId) {
-  const objective = world2.scoreboard.getObjective(objectiveId);
-  if (!objective)
-    throw new Error(`Objective ${objectiveId} not found`);
-  objective.removeParticipant(participant);
+  try {
+    const objective = world2.scoreboard.getObjective(objectiveId);
+    if (!objective)
+      return;
+    objective.removeParticipant(participant);
+  } catch (err) {
+    try {
+      if (participant instanceof Player) {
+        participant.runCommand(`scoreboard players reset @s ${objectiveId}`);
+      } else if (typeof participant === "string") {
+        world2.getDimension("overworld").runCommand(`scoreboard players reset "${participant}" ${objectiveId}`);
+      } else if (typeof participant.name === "string") {
+        world2.getDimension("overworld").runCommand(`scoreboard players reset "${participant.name}" ${objectiveId}`);
+      }
+    } catch (cmdErr) {
+    }
+  }
 }
 function setTimeout(callback, delayMs) {
   const ticks = Math.max(1, Math.round(delayMs / 50));
@@ -622,7 +680,7 @@ function createItemStacks(typeId, amount) {
 }
 
 // src/protection.ts
-import { world as world3, system as system2, Player, ItemStack as ItemStack2 } from "@minecraft/server";
+import { world as world3, system as system2, Player as Player2, ItemStack as ItemStack2 } from "@minecraft/server";
 var protectedBlockTypes = new Set(config_default.containers);
 world3.afterEvents.playerPlaceBlock.subscribe((event) => {
   const { player, block } = event;
@@ -765,7 +823,7 @@ if ("pistonActivate" in world3.beforeEvents) {
   });
 }
 world3.beforeEvents.playerBreakBlock.subscribe((a) => {
-  if (!(a.player instanceof Player))
+  if (!(a.player instanceof Player2))
     return;
   const { player, block } = a;
   const location = block.location;
@@ -875,7 +933,7 @@ world3.beforeEvents.playerBreakBlock.subscribe((a) => {
   }
 });
 world3.beforeEvents.playerInteractWithBlock.subscribe((t) => {
-  if (!(t.player instanceof Player))
+  if (!(t.player instanceof Player2))
     return;
   const player = t.player;
   const block = t.block;
@@ -904,7 +962,7 @@ world3.beforeEvents.playerInteractWithBlock.subscribe((t) => {
   }
 });
 world3.beforeEvents.itemUse.subscribe(({ source, itemStack }) => {
-  if (!(source instanceof Player) || !itemStack)
+  if (!(source instanceof Player2) || !itemStack)
     return;
   if (itemStack.typeId !== "je:chest_lock_1" && itemStack.typeId !== "je:chest_lock_2")
     return;
@@ -928,7 +986,7 @@ world3.beforeEvents.itemUse.subscribe(({ source, itemStack }) => {
 });
 
 // src/shop.ts
-import { ItemStack as ItemStack3, Player as Player2, world as world4, system as system3 } from "@minecraft/server";
+import { ItemStack as ItemStack3, Player as Player3, world as world4, system as system3 } from "@minecraft/server";
 import { ActionFormData, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 var d = { 0: `minecraft:overworld`, 1: `minecraft:nether`, 2: `minecraft:the_end` };
 var dyes = ["minecraft:glow_ink_sac", "minecraft:white_dye", "minecraft:black_dye", "minecraft:blue_dye", "minecraft:brown_dye", "minecraft:cyan_dye", "minecraft:gray_dye", "minecraft:green_dye", "minecraft:light_blue_dye", "minecraft:light_gray_dye", "minecraft:lime_dye", "minecraft:magenta_dye", "minecraft:orange_dye", "minecraft:pink_dye", "minecraft:purple_dye", "minecraft:red_dye", "minecraft:yellow_dye"];
@@ -1615,7 +1673,7 @@ How many do you want to buy?`;
   }
 });
 world4.beforeEvents.playerInteractWithBlock.subscribe((t) => {
-  if (!(t.player instanceof Player2))
+  if (!(t.player instanceof Player3))
     return;
   let player = t.player;
   system3.runTimeout(() => {
@@ -1764,7 +1822,7 @@ world4.beforeEvents.chatSend.subscribe((event) => {
 });
 world4.beforeEvents.itemUse.subscribe((event) => {
   const { source, itemStack } = event;
-  if (!(source instanceof Player2) || !itemStack)
+  if (!(source instanceof Player3) || !itemStack)
     return;
   if (itemStack.typeId === "minecraft:stick" && itemStack.nameTag === "Shop Configurator") {
     event.cancel = true;
@@ -1816,23 +1874,31 @@ system4.runTimeout(() => {
 world5.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn)
     return;
-  setScore(player, "rank", config_default.shopLimit);
-  const fP = world5.scoreboard.getParticipants().find((p) => p.type === "FakePlayer" && p.displayName === player.name);
-  if (!fP)
-    return;
-  if (config_default.currencyType === "scoreboard") {
-    const add = getScore(fP, config_default.currency);
-    if (!add)
-      return;
-    addScore(player, config_default.currency, add);
-    resetScore(fP, config_default.currency);
-    setTimeout(() => {
-      if (player.isValid()) {
-        player.sendMessage(`\uE200 \xA77\xA7oYou earned \xA7e${config_default.currencySymbol}\xA7f${add.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} \xA77from your shops while you were away!\xA7r`);
-        player.playSound("random.levelup", { pitch: 2 });
+  system4.runTimeout(() => {
+    try {
+      if (!player.isValid())
+        return;
+      setScore(player, "rank", config_default.shopLimit);
+      const fP = world5.scoreboard.getParticipants().find((p) => p.type === "FakePlayer" && p.displayName === player.name);
+      if (!fP)
+        return;
+      if (config_default.currencyType === "scoreboard") {
+        const add = getScore(fP, config_default.currency);
+        if (!add)
+          return;
+        addScore(player, config_default.currency, add);
+        resetScore(fP, config_default.currency);
+        setTimeout(() => {
+          if (player.isValid()) {
+            player.sendMessage(`\uE200 \xA77\xA7oYou earned \xA7e${config_default.currencySymbol}\xA7f${add.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} \xA77from your shops while you were away!\xA7r`);
+            player.playSound("random.levelup", { pitch: 2 });
+          }
+        }, 5e3);
       }
-    }, 5e3);
-  }
+    } catch (error) {
+      console.warn(`[Shop Spawn] Error handling player spawn: ${error}`);
+    }
+  }, 20);
 });
 export {
   database2 as database,
