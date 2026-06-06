@@ -35,9 +35,9 @@ jobs:
       - name: Create .mcaddon File
         run: |
           node bump-manifests.js
-          VERSION=$(jq -r '.header.version | join(".")' "PlayerChestsBEH/manifest.json")
-          cd "PlayerChestsBEH" && zip -r ../LeefyChestShopBEH_$VERSION.mcpack * && cd ..
-          cd "PlayerChesRES" && zip -r ../LeefyChestShopRES_$VERSION.mcpack * && cd ..
+          VERSION=$(jq -r '.header.version | join(".")' "LeefyChestShop BEH/manifest.json")
+          cd "LeefyChestShop BEH" && zip -r ../LeefyChestShopBEH_$VERSION.mcpack * && cd ..
+          cd "LeefyChestShop RES" && zip -r ../LeefyChestShopRES_$VERSION.mcpack * && cd ..
           zip -j leefychestshop_$VERSION.mcaddon LeefyChestShopBEH_$VERSION.mcpack LeefyChestShopRES_$VERSION.mcpack
           rm LeefyChestShopBEH_$VERSION.mcpack LeefyChestShopRES_$VERSION.mcpack
           
@@ -51,7 +51,7 @@ jobs:
           git rm --cached "leefychestshop_*.mcaddon" || true
           git add -f leefychestshop_*.mcaddon
           git add -f docs/index.html
-          git add PlayerChestsBEH/manifest.json PlayerChesRES/manifest.json package.json
+          git add "LeefyChestShop BEH/manifest.json" "LeefyChestShop RES/manifest.json" package.json
           if ! git diff --cached --quiet; then
             git commit -m "chore: auto-bump version and generate new UUIDs [skip ci]"
             git push origin main
