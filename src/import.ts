@@ -58,7 +58,7 @@ system.runTimeout(() => {
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     if (!initialSpawn) return;
     
-    // Delay execution by 20 ticks (1 second) to allow network profile/identity to resolve
+    // Delay execution by 80 ticks (4 seconds) to allow network profile/identity to resolve
     system.runTimeout(() => {
         try {
             if (!player.isValid()) return;
@@ -86,6 +86,6 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
         } catch (error) {
             console.warn(`[Shop Spawn] Error handling player spawn: ${error}`);
         }
-    }, 20);
+    }, 80);
 });
 

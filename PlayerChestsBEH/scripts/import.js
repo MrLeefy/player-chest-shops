@@ -1898,7 +1898,7 @@ world5.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     } catch (error) {
       console.warn(`[Shop Spawn] Error handling player spawn: ${error}`);
     }
-  }, 20);
+  }, 80);
 });
 export {
   database2 as database,
