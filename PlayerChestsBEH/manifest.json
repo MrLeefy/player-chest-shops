@@ -6,13 +6,13 @@
 		]
 	},
   "header": {
-    "name": "PlayerShops v2.1.9",
+    "name": "PlayerShops v2.2.0",
     "description": "player chest shops",
     "uuid": "393e0d3f-5fcc-4ae2-813b-38b610102024",
     "version": [
       2,
-      1,
-      9
+      2,
+      0
     ],
     "min_engine_version": [
       1,

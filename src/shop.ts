@@ -916,15 +916,23 @@ export async function showCurrencyConfigurationForm(player: Player) {
 
 // 5. STABLE ADMIN ITEM INTERACTION FOR CURRENCY UI
 world.beforeEvents.itemUse.subscribe(event => {
-    const { source, itemStack } = event;
-    if (!(source instanceof Player) || !itemStack) return;
+    try {
+        const { source, itemStack } = event;
+        if (!(source instanceof Player) || !itemStack) return;
 
-    // Crouch + regular stick + admin tag opens global currency config
-    if (itemStack.typeId === 'minecraft:stick' && source.isSneaking && source.hasTag(config.adminTag)) {
-        event.cancel = true;
-        system.run(() => {
-            showCurrencyConfigurationForm(source);
-        });
+        // Crouch + regular stick + admin tag opens global currency config
+        if (itemStack.typeId === 'minecraft:stick' && source.isSneaking && source.hasTag(config.adminTag)) {
+            event.cancel = true;
+            system.run(() => {
+                try {
+                    showCurrencyConfigurationForm(source);
+                } catch (err: any) {
+                    console.warn(`[Shop Admin Config] Error showing form: ${err} - Stack: ${err.stack}`);
+                }
+            });
+        }
+    } catch (e: any) {
+        console.warn(`[Shop itemUse] Error: ${e} - Stack: ${e.stack}`);
     }
 });
 
