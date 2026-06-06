@@ -1,0 +1,12 @@
+{
+  "resource_pack_name": "vanilla",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "je:chest_lock_1": {
+      "textures": "textures/locks/1"
+    },
+    "je:chest_lock_2": {
+      "textures": "textures/locks/2"
+    }
+  }
+}
