@@ -42,7 +42,23 @@ jobs:
           rm LeefyChestShopBEH_$VERSION.mcpack LeefyChestShopRES_$VERSION.mcpack
           
           mkdir -p docs
-          echo "<!DOCTYPE html><html><head><meta http-equiv=\"refresh\" content=\"0; url=https://github.com/${{ github.repository }}/raw/main/leefychestshop_$VERSION.mcaddon\"></head><body>Redirecting to latest release...</body></html>" > docs/index.html
+          cat << EOF > docs/index.html
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+            <meta http-equiv="Pragma" content="no-cache">
+            <meta http-equiv="Expires" content="0">
+            <title>Redirecting...</title>
+          </head>
+          <body>
+            <script>
+              window.location.replace("https://github.com/${{ github.repository }}/raw/main/leefychestshop_" + "$VERSION" + ".mcaddon?t=" + Date.now());
+            </script>
+            Redirecting to latest release...
+          </body>
+          </html>
+          EOF
 
       - name: Commit and Push
         run: |
