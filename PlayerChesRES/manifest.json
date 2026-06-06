@@ -8,11 +8,11 @@
   "header": {
     "name": "ChestShop RES",
     "description": "",
-    "uuid": "7ea0869d-e6fb-480e-bc83-26f294877eb7",
+    "uuid": "45061076-538e-4fd7-8ffb-2007aeacc7ec",
     "version": [
       3,
       0,
-      4
+      5
     ],
     "min_engine_version": [
       1,
@@ -23,7 +23,7 @@
   "modules": [
     {
       "type": "resources",
-      "uuid": "0074f452-c60e-42a1-b501-db74e803fc4b",
+      "uuid": "eb08a761-aa02-4ce8-9b34-c8a8cbf0440e",
       "version": [
         1,
         0,
