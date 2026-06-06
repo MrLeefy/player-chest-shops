@@ -1083,15 +1083,24 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((sign) => {
             return;
           }
           const processResult = processItems(chestInv);
+          let itemAmount = 0, itemName = "\xA7cNo Item Yet\xA7r", hasNametag = false, enchants = {}, sell = null;
           if ("error" in processResult && processResult.error) {
-            player.sendMessage(`\xA7cThis shop cannot be created. Error: ${processResult.error}.`);
-            player.playSound("note.bass");
-            targetSign?.setType("minecraft:air");
-            return;
+            if (processResult.error === "SHOP EMPTY") {
+            } else {
+              player.sendMessage(`\xA7cThis shop cannot be created. Error: ${processResult.error}.`);
+              player.playSound("note.bass");
+              targetSign?.setType("minecraft:air");
+              return;
+            }
+          } else {
+            const result = processResult;
+            itemAmount = result.itemAmount;
+            itemName = result.itemName;
+            hasNametag = result.hasNametag;
+            enchants = result.enchants;
+            sell = result.sell;
           }
-          const result = processResult;
-          let { itemAmount, itemName, hasNametag, enchants, sell } = result;
-          if (sell.typeId === "minecraft:potion" || sell.typeId === "minecraft:splash_potion" || sell.typeId === "minecraft:lingering_potion") {
+          if (sell && (sell.typeId === "minecraft:potion" || sell.typeId === "minecraft:splash_potion" || sell.typeId === "minecraft:lingering_potion")) {
             itemName = getPotionDisplayName(sell, true);
           }
           let exT = `${encode(`x${block.location.x}y${block.location.y}z${block.location.z}r`)}`;
@@ -1180,7 +1189,8 @@ ${priceDisplay}\xA7r
         }, 1);
         return;
       }
-      if (player.isSneaking && data.startsWith("x", 0) && (player.name == ownerName || player.hasTag(config_default.adminTag))) {
+      const isStick = sign.itemStack && sign.itemStack.typeId === "minecraft:stick";
+      if ((player.isSneaking || isStick) && data.startsWith("x", 0) && (player.name == ownerName || player.hasTag(config_default.adminTag))) {
         sign.cancel = true;
         activeTransactions.set(coordsKey, true);
         system3.runTimeout(async () => {
@@ -1200,18 +1210,30 @@ ${priceDisplay}\xA7r
               return;
             }
             const processResult = processItems(chestInventoryComp.container);
+            let itemAmount = 0, itemName = "", enchants = {}, sell = null, hasNametag = false;
+            const signLines = content.getText().split("\n");
+            const existingItemName = signLines[1].substring(signLines[1].indexOf("\xA7r") + 2);
             if ("error" in processResult && processResult.error) {
-              player.sendMessage(`\xA7cThis shop has an error: ${processResult.error}.`);
-              const signLines = content.getText().split("\n");
-              signLines[3] = `\xA7cSHOP ERROR`;
-              content.setText(signLines.join("\n"));
-              return;
+              if (processResult.error === "SHOP EMPTY") {
+                itemAmount = 0;
+                itemName = existingItemName || "\xA7cNo Item Yet\xA7r";
+              } else {
+                player.sendMessage(`\xA7cThis shop has an error: ${processResult.error}.`);
+                signLines[3] = `\xA7cSHOP ERROR`;
+                content.setText(signLines.join("\n"));
+                return;
+              }
+            } else {
+              const result = processResult;
+              itemAmount = result.itemAmount;
+              itemName = result.itemName;
+              enchants = result.enchants;
+              sell = result.sell;
+              hasNametag = result.hasNametag;
             }
-            const result = processResult;
-            let { itemAmount, itemName, enchants, sell, hasNametag } = result;
             let iname = itemName;
             let signItemName = itemName;
-            if (sell.typeId === "minecraft:potion" || sell.typeId === "minecraft:splash_potion" || sell.typeId === "minecraft:lingering_potion") {
+            if (sell && (sell.typeId === "minecraft:potion" || sell.typeId === "minecraft:splash_potion" || sell.typeId === "minecraft:lingering_potion")) {
               signItemName = getPotionDisplayName(sell, true);
             } else if (itemName.replace(/§\w/g, "").length > 17) {
               if (itemName.split(" ").length > 1) {
@@ -1384,19 +1406,33 @@ Price ${config_default.currencySymbol}`, "Type your price here", "10").then((e) 
               }
               const container = chestInventoryComp.container;
               const processResult = processItems(container);
+              let itemAmount = 0, itemName = "", enchants = {}, sell = null, hasNametag = false;
+              const signLines = content.getText().split("\n");
               if ("error" in processResult && processResult.error) {
-                player.sendMessage(`\xA7cThis shop has an error (${processResult.error}).`);
-                const signLines = content.getText().split("\n");
-                signLines[3] = `\xA7cSHOP ERROR`;
-                content.setText(signLines.join("\n"));
-                player.playSound("note.bass");
-                return;
+                if (processResult.error === "SHOP EMPTY") {
+                  signLines[3] = "\xA7l\xA74OUT OF STOCK\xA7r";
+                  content.setText(signLines.join("\n"));
+                  player.sendMessage("\uE201 \xA7cThis shop is currently out of stock!\xA7r");
+                  player.playSound("note.bass");
+                  return;
+                } else {
+                  player.sendMessage(`\xA7cThis shop has an error (${processResult.error}).`);
+                  signLines[3] = `\xA7cSHOP ERROR`;
+                  content.setText(signLines.join("\n"));
+                  player.playSound("note.bass");
+                  return;
+                }
+              } else {
+                const result = processResult;
+                itemAmount = result.itemAmount;
+                itemName = result.itemName;
+                enchants = result.enchants;
+                sell = result.sell;
+                hasNametag = result.hasNametag;
               }
-              const result = processResult;
-              let { itemAmount, itemName, enchants, sell, hasNametag } = result;
               let iname = itemName;
               let signItemName = itemName;
-              if (sell.typeId === "minecraft:potion" || sell.typeId === "minecraft:splash_potion" || sell.typeId === "minecraft:lingering_potion") {
+              if (sell && (sell.typeId === "minecraft:potion" || sell.typeId === "minecraft:splash_potion" || sell.typeId === "minecraft:lingering_potion")) {
                 signItemName = getPotionDisplayName(sell, true);
               } else if (itemName.replace(/§\w/g, "").length > 17) {
                 if (itemName.split(" ").length > 1) {
@@ -1713,16 +1749,28 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((t) => {
       return;
     const processResult = processItems(chestInventoryComp.container);
     system3.runTimeout(() => {
+      const signLines = signComp.getText().split("\n");
+      let itemAmount = 0, itemName = "", enchants = {}, hasNametag = false, sell = null;
+      const existingItemName = signLines[1].substring(signLines[1].indexOf("\xA7r") + 2);
       if ("error" in processResult && processResult.error) {
-        const signLines = signComp.getText().split("\n");
-        signLines[3] = `\xA7cSHOP ERROR`;
-        signComp.setText(signLines.join("\n"));
+        if (processResult.error === "SHOP EMPTY") {
+          signLines[3] = "\xA7l\xA74OUT OF STOCK\xA7r";
+          signComp.setText(signLines.join("\n"));
+        } else {
+          signLines[3] = `\xA7cSHOP ERROR`;
+          signComp.setText(signLines.join("\n"));
+        }
         return;
+      } else {
+        const result = processResult;
+        itemAmount = result.itemAmount;
+        itemName = result.itemName;
+        enchants = result.enchants;
+        hasNametag = result.hasNametag;
+        sell = result.sell;
       }
-      const result = processResult;
-      let { itemAmount, itemName, enchants, hasNametag, sell } = result;
       let signItemName = itemName;
-      if (sell.typeId === "minecraft:potion" || sell.typeId === "minecraft:splash_potion" || sell.typeId === "minecraft:lingering_potion") {
+      if (sell && (sell.typeId === "minecraft:potion" || sell.typeId === "minecraft:splash_potion" || sell.typeId === "minecraft:lingering_potion")) {
         signItemName = getPotionDisplayName(sell, true);
       } else if (itemName.replace(/§\w/g, "").length > 17) {
         if (itemName.split(" ").length > 1) {
@@ -1805,33 +1853,14 @@ async function showCurrencyConfigurationForm(player) {
     player.sendMessage("\xA7aThis setting has been saved and will persist through restarts.");
   }
 }
-world4.beforeEvents.chatSend.subscribe((event) => {
-  const { sender, message } = event;
-  if (!sender)
-    return;
-  if (message.trim().startsWith("-playershop") || message.trim().startsWith("/playershop:shopitem")) {
-    event.cancel = true;
-    system3.run(() => {
-      if (sender.hasTag(config_default.adminTag)) {
-        showCurrencyConfigurationForm(sender);
-      } else {
-        sender.sendMessage("\xA7cYou must be an admin to configure the shop currency.");
-      }
-    });
-  }
-});
 world4.beforeEvents.itemUse.subscribe((event) => {
   const { source, itemStack } = event;
   if (!(source instanceof Player3) || !itemStack)
     return;
-  if (itemStack.typeId === "minecraft:stick" && itemStack.nameTag === "Shop Configurator") {
+  if (itemStack.typeId === "minecraft:stick" && source.isSneaking && source.hasTag(config_default.adminTag)) {
     event.cancel = true;
     system3.run(() => {
-      if (source.hasTag(config_default.adminTag)) {
-        showCurrencyConfigurationForm(source);
-      } else {
-        source.sendMessage("\xA7cYou must be an admin to configure the shop currency.");
-      }
+      showCurrencyConfigurationForm(source);
     });
   }
 });

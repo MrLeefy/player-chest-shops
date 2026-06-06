@@ -118,19 +118,28 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                     }
                     
                     const processResult = processItems(chestInv);
+                    let itemAmount = 0, itemName = "§cNo Item Yet§r", hasNametag = false, enchants = {}, sell: any = null;
                     if ('error' in processResult && processResult.error) {
-                        player.sendMessage(`§cThis shop cannot be created. Error: ${processResult.error}.`);
-                        player.playSound('note.bass');
-                        targetSign?.setType('minecraft:air');
-                        return;
+                        if (processResult.error === "SHOP EMPTY") {
+                            // Empty chest is allowed at creation - defaults to "No Item Yet"
+                        } else {
+                            player.sendMessage(`§cThis shop cannot be created. Error: ${processResult.error}.`);
+                            player.playSound('note.bass');
+                            targetSign?.setType('minecraft:air');
+                            return;
+                        }
+                    } else {
+                        const result = processResult as any;
+                        itemAmount = result.itemAmount;
+                        itemName = result.itemName;
+                        hasNametag = result.hasNametag;
+                        enchants = result.enchants;
+                        sell = result.sell;
                     }
 
-                    const result = processResult as any;
-                    let { itemAmount, itemName, hasNametag, enchants, sell } = result;
-
-                    if (sell.typeId === 'minecraft:potion' || 
+                    if (sell && (sell.typeId === 'minecraft:potion' || 
                         sell.typeId === 'minecraft:splash_potion' || 
-                        sell.typeId === 'minecraft:lingering_potion') {
+                        sell.typeId === 'minecraft:lingering_potion')) {
                         itemName = getPotionDisplayName(sell, true);
                     }
 
@@ -235,21 +244,34 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                         }
                         
                         const processResult = processItems(chestInventoryComp.container);
+                        let itemAmount = 0, itemName = "", enchants = {}, sell: any = null, hasNametag = false;
+                        const signLines = content.getText().split('\n');
+                        const existingItemName = signLines[1].substring(signLines[1].indexOf('§r') + 2);
+
                         if ('error' in processResult && processResult.error) {
-                            player.sendMessage(`§cThis shop has an error: ${processResult.error}.`);
-                            const signLines = content.getText().split('\n');
-                            signLines[3] = `§cSHOP ERROR`;
-                            content.setText(signLines.join('\n'));
-                            return;
+                            if (processResult.error === "SHOP EMPTY") {
+                                itemAmount = 0;
+                                itemName = existingItemName || "§cNo Item Yet§r";
+                            } else {
+                                player.sendMessage(`§cThis shop has an error: ${processResult.error}.`);
+                                signLines[3] = `§cSHOP ERROR`;
+                                content.setText(signLines.join('\n'));
+                                return;
+                            }
+                        } else {
+                            const result = processResult as any;
+                            itemAmount = result.itemAmount;
+                            itemName = result.itemName;
+                            enchants = result.enchants;
+                            sell = result.sell;
+                            hasNametag = result.hasNametag;
                         }
-                        const result = processResult as any;
-                        let { itemAmount, itemName, enchants, sell, hasNametag } = result;
                         let iname = itemName;
                         
                         let signItemName = itemName;
-                        if (sell.typeId === 'minecraft:potion' || 
+                        if (sell && (sell.typeId === 'minecraft:potion' || 
                             sell.typeId === 'minecraft:splash_potion' || 
-                            sell.typeId === 'minecraft:lingering_potion') {
+                            sell.typeId === 'minecraft:lingering_potion')) {
                             signItemName = getPotionDisplayName(sell, true);
                         } else if (itemName.replace(/§\w/g, '').length > 17) {
                             if (itemName.split(' ').length > 1) {
@@ -403,24 +425,37 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
 
                             const container = chestInventoryComp.container as Container;
                             const processResult = processItems(container);
+                            let itemAmount = 0, itemName = "", enchants = {}, sell: any = null, hasNametag = false;
+                            const signLines = content.getText().split('\n');
 
                             if ('error' in processResult && processResult.error) {
-                                player.sendMessage(`§cThis shop has an error (${processResult.error}).`);
-                                const signLines = content.getText().split('\n');
-                                signLines[3] = `§cSHOP ERROR`;
-                                content.setText(signLines.join('\n'));
-                                player.playSound('note.bass');
-                                return;
+                                if (processResult.error === "SHOP EMPTY") {
+                                    signLines[3] = '§l§4OUT OF STOCK§r';
+                                    content.setText(signLines.join('\n'));
+                                    player.sendMessage(' §cThis shop is currently out of stock!§r');
+                                    player.playSound('note.bass');
+                                    return;
+                                } else {
+                                    player.sendMessage(`§cThis shop has an error (${processResult.error}).`);
+                                    signLines[3] = `§cSHOP ERROR`;
+                                    content.setText(signLines.join('\n'));
+                                    player.playSound('note.bass');
+                                    return;
+                                }
+                            } else {
+                                const result = processResult as any;
+                                itemAmount = result.itemAmount;
+                                itemName = result.itemName;
+                                enchants = result.enchants;
+                                sell = result.sell;
+                                hasNametag = result.hasNametag;
                             }
-                            
-                            const result = processResult as any;
-                            let { itemAmount, itemName, enchants, sell, hasNametag } = result;
                             let iname = itemName;
                             
                             let signItemName = itemName;
-                            if (sell.typeId === 'minecraft:potion' || 
+                            if (sell && (sell.typeId === 'minecraft:potion' || 
                                 sell.typeId === 'minecraft:splash_potion' || 
-                                sell.typeId === 'minecraft:lingering_potion') {
+                                sell.typeId === 'minecraft:lingering_potion')) {
                                 signItemName = getPotionDisplayName(sell, true);
                             } else if (itemName.replace(/§\w/g, '').length > 17) {
                                 if (itemName.split(' ').length > 1) {
@@ -742,19 +777,32 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
 
         const processResult = processItems(chestInventoryComp.container);
         system.runTimeout(() => {
+            const signLines = signComp.getText().split('\n');
+            let itemAmount = 0, itemName = "", enchants = {}, hasNametag = false, sell: any = null;
+            const existingItemName = signLines[1].substring(signLines[1].indexOf('§r') + 2);
+
             if ('error' in processResult && processResult.error) {
-                const signLines = signComp.getText().split('\n');
-                signLines[3] = `§cSHOP ERROR`;
-                signComp.setText(signLines.join('\n'));
+                if (processResult.error === "SHOP EMPTY") {
+                    signLines[3] = '§l§4OUT OF STOCK§r';
+                    signComp.setText(signLines.join('\n'));
+                } else {
+                    signLines[3] = `§cSHOP ERROR`;
+                    signComp.setText(signLines.join('\n'));
+                }
                 return;
+            } else {
+                const result = processResult as any;
+                itemAmount = result.itemAmount;
+                itemName = result.itemName;
+                enchants = result.enchants;
+                hasNametag = result.hasNametag;
+                sell = result.sell;
             }
-            const result = processResult as any;
-            let { itemAmount, itemName, enchants, hasNametag, sell } = result;
             
             let signItemName = itemName;
-            if (sell.typeId === 'minecraft:potion' || 
+            if (sell && (sell.typeId === 'minecraft:potion' || 
                 sell.typeId === 'minecraft:splash_potion' || 
-                sell.typeId === 'minecraft:lingering_potion') {
+                sell.typeId === 'minecraft:lingering_potion')) {
                 signItemName = getPotionDisplayName(sell, true);
             } else if (itemName.replace(/§\w/g, '').length > 17) {
                 if (itemName.split(' ').length > 1) {
