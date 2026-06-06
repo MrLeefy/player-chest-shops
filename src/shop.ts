@@ -863,21 +863,42 @@ export async function showCurrencyConfigurationForm(player: Player) {
 }
 
 // 4. STABLE CHAT EVENTS (ALTERNATIVE FOR REGISTER COMMANDS)
-(world.beforeEvents as any).chatSend.subscribe((event: any) => {
-    const { sender, message } = event;
-    if (!sender) return;
+if (world.beforeEvents && 'chatSend' in world.beforeEvents) {
+    (world.beforeEvents as any).chatSend.subscribe((event: any) => {
+        const { sender, message } = event;
+        if (!sender) return;
 
-    if (message.trim().startsWith("-playershop") || message.trim().startsWith("/playershop:shopitem")) {
-        event.cancel = true;
-        system.run(() => {
-            if (sender.hasTag(config.adminTag)) {
-                showCurrencyConfigurationForm(sender);
-            } else {
-                sender.sendMessage("§cYou must be an admin to configure the shop currency.");
+        if (message.trim().startsWith("-playershop") || message.trim().startsWith("/playershop:shopitem")) {
+            event.cancel = true;
+            system.run(() => {
+                if (sender.hasTag(config.adminTag)) {
+                    showCurrencyConfigurationForm(sender);
+                } else {
+                    sender.sendMessage("§cYou must be an admin to configure the shop currency.");
+                }
+            });
+        }
+    });
+} else {
+    console.warn("[PlayerShops] 'world.beforeEvents.chatSend' is not available. Chat commands like '-playershop' are disabled. Use '/scriptevent playershop:config' instead.");
+}
+
+// 5. SCRIPTEVENT FOR STABLE CONFIGURATION COMMANDS
+if (system.afterEvents && 'scriptEventReceive' in system.afterEvents) {
+    system.afterEvents.scriptEventReceive.subscribe((event: any) => {
+        if (event.id === "playershop:config") {
+            const sender = event.sourceEntity;
+            if (sender && sender.typeId === "minecraft:player") {
+                const player = sender as any;
+                if (player.hasTag(config.adminTag)) {
+                    showCurrencyConfigurationForm(player);
+                } else {
+                    player.sendMessage("§cYou must be an admin to configure the shop currency.");
+                }
             }
-        });
-    }
-});
+        }
+    });
+}
 
 // 5. STABLE ADMIN ITEM INTERACTION FOR CURRENCY UI
 world.beforeEvents.itemUse.subscribe(event => {
