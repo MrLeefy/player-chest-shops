@@ -49,7 +49,7 @@ class DynamicPropertyDatabase {
 
     set(key: string, value: any): this {
         const index = this.#getIndex();
-        this.#clearProperties(key);
+        const oldPropIds = index[key];
 
         const serializedValue = JSON.stringify(value);
 
@@ -70,6 +70,22 @@ class DynamicPropertyDatabase {
             const propId = `${this.#prefix}${key}`;
             world.setDynamicProperty(propId, serializedValue);
             index[key] = propId;
+        }
+
+        // Transactional: Clear the old properties now that the new ones have successfully written
+        if (oldPropIds) {
+            if (Array.isArray(oldPropIds)) {
+                for (const chunkId of oldPropIds) {
+                    const isReused = Array.isArray(index[key]) 
+                        ? (index[key] as string[]).includes(chunkId)
+                        : index[key] === chunkId;
+                    if (!isReused) {
+                        world.setDynamicProperty(chunkId, undefined);
+                    }
+                }
+            } else if (typeof oldPropIds === 'string' && index[key] !== oldPropIds) {
+                world.setDynamicProperty(oldPropIds, undefined);
+            }
         }
 
         this.#setIndex(index);

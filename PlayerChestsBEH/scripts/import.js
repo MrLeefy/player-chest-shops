@@ -80,7 +80,7 @@ var DynamicPropertyDatabase = class {
   }
   set(key, value) {
     const index = this.#getIndex();
-    this.#clearProperties(key);
+    const oldPropIds = index[key];
     const serializedValue = JSON.stringify(value);
     if (serializedValue.length > MAX_PROPERTY_SIZE) {
       const chunks = [];
@@ -98,6 +98,18 @@ var DynamicPropertyDatabase = class {
       const propId = `${this.#prefix}${key}`;
       world.setDynamicProperty(propId, serializedValue);
       index[key] = propId;
+    }
+    if (oldPropIds) {
+      if (Array.isArray(oldPropIds)) {
+        for (const chunkId of oldPropIds) {
+          const isReused = Array.isArray(index[key]) ? index[key].includes(chunkId) : index[key] === chunkId;
+          if (!isReused) {
+            world.setDynamicProperty(chunkId, void 0);
+          }
+        }
+      } else if (typeof oldPropIds === "string" && index[key] !== oldPropIds) {
+        world.setDynamicProperty(oldPropIds, void 0);
+      }
     }
     this.#setIndex(index);
     return this;
@@ -269,6 +281,7 @@ function displayFormat(input) {
 }
 
 // src/item.ts
+import { ItemStack } from "@minecraft/server";
 var tippedArrowMapping = {
   "jump_boost": "Arrow of Leaping",
   "jump": "Arrow of Leaping",
@@ -590,48 +603,67 @@ function uContainer(objContainer, amount) {
   }
   return [newCont, remaining];
 }
+function createItemStacks(typeId, amount) {
+  const stacks = [];
+  let remaining = amount;
+  let maxStackSize = 64;
+  try {
+    const tempItem = new ItemStack(typeId, 1);
+    maxStackSize = tempItem.maxAmount;
+  } catch (e) {
+    console.warn(`Failed to determine max stack size for ${typeId}: ${e}`);
+  }
+  while (remaining > 0) {
+    const currentAmount = Math.min(remaining, maxStackSize);
+    stacks.push(new ItemStack(typeId, currentAmount));
+    remaining -= currentAmount;
+  }
+  return stacks;
+}
 
 // src/protection.ts
-import { world as world3, system as system2, Player, ItemStack } from "@minecraft/server";
+import { world as world3, system as system2, Player, ItemStack as ItemStack2 } from "@minecraft/server";
 var protectedBlockTypes = new Set(config_default.containers);
 world3.afterEvents.playerPlaceBlock.subscribe((event) => {
-  const player = event.player;
-  const block = event.block;
-  const radius = 5;
-  if (block.typeId !== "minecraft:piston" && block.typeId !== "minecraft:sticky_piston")
+  const { player, block } = event;
+  if (block.typeId !== "minecraft:hopper")
     return;
-  const checkLocations = [];
-  for (let x = -radius; x <= radius; x++) {
-    for (let y = -radius; y <= radius; y++) {
-      for (let z = -radius; z <= radius; z++) {
-        checkLocations.push({
-          x: block.location.x + x,
-          y: block.location.y + y,
-          z: block.location.z + z
-        });
-      }
-    }
-  }
-  const dim = world3.getDimension(player.dimension.id);
-  for (const checkLocation of checkLocations) {
-    if (checkLocation.y < -64 || checkLocation.y >= 320)
+  const directions = [
+    { x: 0, y: 1, z: 0 },
+    { x: 0, y: -1, z: 0 },
+    { x: 1, y: 0, z: 0 },
+    { x: -1, y: 0, z: 0 },
+    { x: 0, y: 0, z: 1 },
+    { x: 0, y: 0, z: -1 }
+  ];
+  const dim = block.dimension;
+  for (const offset of directions) {
+    const checkPos = {
+      x: block.location.x + offset.x,
+      y: block.location.y + offset.y,
+      z: block.location.z + offset.z
+    };
+    if (checkPos.y < -64 || checkPos.y >= 320)
       continue;
     try {
-      const nearbyBlock = dim.getBlock(checkLocation);
-      if (nearbyBlock && protectedBlockTypes.has(nearbyBlock.typeId)) {
-        const inventory = nearbyBlock.getComponent("inventory");
+      const adjacentBlock = dim.getBlock(checkPos);
+      if (adjacentBlock && protectedBlockTypes.has(adjacentBlock.typeId)) {
+        const inventory = adjacentBlock.getComponent("inventory");
         if (inventory && inventory.container) {
-          const container = inventory.container;
-          for (let i = 0; i < container.size; i++) {
-            const item = container.getItem(i);
+          for (let i = 0; i < inventory.container.size; i++) {
+            const item = inventory.container.getItem(i);
             if (item?.typeId === "je:chest_lock_2") {
               const lore = item.getLore();
               const ownerName = lore[0]?.substring(2);
               if (ownerName && ownerName !== player.name && !player.hasTag(config_default.adminTag)) {
-                dim.getBlock(block.location)?.setType("minecraft:air");
+                block.setType("minecraft:air");
                 system2.runTimeout(() => {
                   player.playSound("note.bass");
-                  player.sendMessage(`\xA7e${ownerName} \xA7clocked this area.`);
+                  player.sendMessage(`\xA7cYou cannot place hoppers adjacent to \xA7e${ownerName}'s \xA7clocked shop chest.`);
+                  const playerInvComp = player.getComponent("inventory");
+                  if (playerInvComp && playerInvComp.container) {
+                    playerInvComp.container.addItem(new ItemStack2("minecraft:hopper", 1));
+                  }
                 }, 1);
                 return;
               }
@@ -644,23 +676,34 @@ world3.afterEvents.playerPlaceBlock.subscribe((event) => {
   }
 });
 world3.beforeEvents.explosion.subscribe((e) => {
-  for (const blockPos of e.getImpactedBlocks()) {
+  const impacted = e.getImpactedBlocks();
+  const newImpacted = [];
+  let modified = false;
+  for (const block of impacted) {
     try {
-      const block = e.dimension.getBlock(blockPos);
       if (block && protectedBlockTypes.has(block.typeId)) {
         const inventory = block.getComponent("inventory");
+        let isLocked = false;
         if (inventory && inventory.container) {
           for (let i = 0; i < inventory.container.size; i++) {
             const item = inventory.container.getItem(i);
             if (item?.typeId === "je:chest_lock_2") {
-              e.cancel = true;
-              return;
+              isLocked = true;
+              break;
             }
           }
+        }
+        if (isLocked) {
+          modified = true;
+          continue;
         }
       }
     } catch (err) {
     }
+    newImpacted.push(block);
+  }
+  if (modified) {
+    e.setImpactedBlocks(newImpacted);
   }
 });
 if ("pistonActivate" in world3.beforeEvents) {
@@ -827,10 +870,10 @@ world3.beforeEvents.itemUse.subscribe(({ source, itemStack }) => {
       return;
     let lock = void 0;
     if (itemStack.typeId === "je:chest_lock_2" && source.isSneaking) {
-      lock = new ItemStack("je:chest_lock_1", 1);
+      lock = new ItemStack2("je:chest_lock_1", 1);
       source.onScreenDisplay.setActionBar("Lock Reset");
     } else if (itemStack.typeId === "je:chest_lock_1" && !source.isSneaking) {
-      lock = new ItemStack("je:chest_lock_2", 1);
+      lock = new ItemStack2("je:chest_lock_2", 1);
       lock.setLore([`\xA77${source.name}`]);
       source.onScreenDisplay.setActionBar(`\xA7aLock Owner set to \xA7e${source.name}`);
     } else
@@ -841,7 +884,7 @@ world3.beforeEvents.itemUse.subscribe(({ source, itemStack }) => {
 });
 
 // src/shop.ts
-import { ItemStack as ItemStack2, Player as Player2, world as world4, system as system3 } from "@minecraft/server";
+import { ItemStack as ItemStack3, Player as Player2, world as world4, system as system3 } from "@minecraft/server";
 import { ActionFormData, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 var d = { 0: `minecraft:overworld`, 1: `minecraft:nether`, 2: `minecraft:the_end` };
 var dyes = ["minecraft:glow_ink_sac", "minecraft:white_dye", "minecraft:black_dye", "minecraft:blue_dye", "minecraft:brown_dye", "minecraft:cyan_dye", "minecraft:gray_dye", "minecraft:green_dye", "minecraft:light_blue_dye", "minecraft:light_gray_dye", "minecraft:lime_dye", "minecraft:magenta_dye", "minecraft:orange_dye", "minecraft:pink_dye", "minecraft:purple_dye", "minecraft:red_dye", "minecraft:yellow_dye"];
@@ -913,7 +956,7 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((sign) => {
             }
           }
           if (!hasLockItem) {
-            const lockItem = new ItemStack2("je:chest_lock_2", 1);
+            const lockItem = new ItemStack3("je:chest_lock_2", 1);
             lockItem.setLore([`\xA77${player.name}`]);
             chestInv.addItem(lockItem);
           }
@@ -930,7 +973,7 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((sign) => {
           resetScore(player, "signX");
           resetScore(player, "signY");
           resetScore(player, "signZ");
-          const targetSign = player.dimension.getBlock(signLoc);
+          const targetSign = block.dimension.getBlock(signLoc);
           const signComp = targetSign?.getComponent("sign");
           if (!signComp) {
             player.sendMessage("\uE201 \xA7cSign has been broken or missing. Try Again.");
@@ -1152,7 +1195,7 @@ Price ${config_default.currencySymbol}`, "Type your price here", "10").then((e) 
               const itemsToGive = [];
               for (const itemId in salesData) {
                 if (salesData[itemId] > 0)
-                  itemsToGive.push(new ItemStack2(itemId, salesData[itemId]));
+                  itemsToGive.push(...createItemStacks(itemId, salesData[itemId]));
               }
               let successfullyGiven = {};
               for (const itemStack of itemsToGive) {
@@ -1211,12 +1254,15 @@ Price ${config_default.currencySymbol}`, "Type your price here", "10").then((e) 
         system3.runTimeout(async () => {
           try {
             if (data.startsWith("x", 0)) {
-              let decode = /([xyz])(-?\d+)/g, match, vars = {};
+              let decode = /([xyz])(-?\d+)|d(\w+)/g, match, vars = { d: "minecraft:overworld" };
               while ((match = decode.exec(data)) !== null) {
-                vars[match[1]] = parseInt(match[2]);
+                if (match[3])
+                  vars["d"] = match[3];
+                else
+                  vars[match[1]] = parseInt(match[2]);
               }
-              let { x, y, z } = vars;
-              let chest = player.dimension.getBlock({ x, y, z });
+              let { x, y, z, d: d2 } = vars;
+              let chest = world4.getDimension(d2).getBlock({ x, y, z });
               const chestInventoryComp = chest?.getComponent("inventory");
               if (!chestInventoryComp || !chestInventoryComp.container) {
                 player.sendMessage("\uE201 \xA7cChest is missing or has been broken!\xA7r");
@@ -1332,7 +1378,7 @@ How many do you want to buy?`;
                 player.playSound("note.bass");
                 return;
               }
-              let activeChest = player.dimension.getBlock({ x, y, z });
+              let activeChest = world4.getDimension(d2).getBlock({ x, y, z });
               const activeChestInvComp = activeChest?.getComponent("inventory");
               if (!activeChestInvComp || !activeChestInvComp.container) {
                 player.sendMessage("\uE201 \xA7cChest was broken or deleted. Transaction canceled.\xA7r");
@@ -1347,6 +1393,11 @@ How many do you want to buy?`;
                 return;
               }
               const actRes = activeResult;
+              if (!actRes.sell || !areItemsIdentical(sell, actRes.sell)) {
+                player.sendMessage("\uE201 \xA7cShop item type changed. Transaction canceled.\xA7r");
+                player.playSound("note.bass");
+                return;
+              }
               if (amount > actRes.itemAmount) {
                 player.sendMessage(`\uE201 \xA7cSorry, the stock is insufficient.\xA7r`);
                 player.playSound("note.bass");
@@ -1466,12 +1517,19 @@ How many do you want to buy?`;
                 if (owner) {
                   const ownerInvComp = owner.getComponent("inventory");
                   if (ownerInvComp && ownerInvComp.container) {
-                    const leftover = ownerInvComp.container.addItem(new ItemStack2(config_default.currency, total));
-                    if (leftover && leftover.amount > 0) {
+                    const payoutStacks = createItemStacks(config_default.currency, total);
+                    let totalLeftover = 0;
+                    for (const stack of payoutStacks) {
+                      const leftover = ownerInvComp.container.addItem(stack);
+                      if (leftover && leftover.amount > 0) {
+                        totalLeftover += leftover.amount;
+                      }
+                    }
+                    if (totalLeftover > 0) {
                       let salesData = offlineSalesDB.get(ownerName) ?? {};
-                      salesData[config_default.currency] = (salesData[config_default.currency] || 0) + leftover.amount;
+                      salesData[config_default.currency] = (salesData[config_default.currency] || 0) + totalLeftover;
                       offlineSalesDB.set(ownerName, salesData);
-                      owner.sendMessage(`\xA7cYour inventory was full! \xA7f${leftover.amount}x ${currencyItemName} \xA7cwas sent to your offline sales bank.`);
+                      owner.sendMessage(`\xA7cYour inventory was full! \xA7f${totalLeftover}x ${currencyItemName} \xA7cwas sent to your offline sales bank.`);
                     }
                   }
                   owner.playSound("random.orb");

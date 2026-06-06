@@ -4,49 +4,50 @@ import { iName } from './utility';
 
 const protectedBlockTypes = new Set<string>(config.containers);
 
-// 1. PISTON PLACEMENT PROTECTION
+// 1. HOPPER PLACEMENT PROTECTION ADJACENT TO LOCKED CONTAINERS
 world.afterEvents.playerPlaceBlock.subscribe(event => {
-    const player = event.player;
-    const block = event.block;
-    const radius = 5;
+    const { player, block } = event;
+    if (block.typeId !== 'minecraft:hopper') return;
 
-    if (block.typeId !== 'minecraft:piston' && block.typeId !== 'minecraft:sticky_piston') return;
+    const directions = [
+        { x: 0, y: 1, z: 0 },
+        { x: 0, y: -1, z: 0 },
+        { x: 1, y: 0, z: 0 },
+        { x: -1, y: 0, z: 0 },
+        { x: 0, y: 0, z: 1 },
+        { x: 0, y: 0, z: -1 }
+    ];
 
-    const checkLocations: Vector3[] = [];
-    for (let x = -radius; x <= radius; x++) {
-        for (let y = -radius; y <= radius; y++) {
-            for (let z = -radius; z <= radius; z++) {
-                checkLocations.push({ 
-                    x: block.location.x + x, 
-                    y: block.location.y + y, 
-                    z: block.location.z + z 
-                });
-            }
-        }
-    }
-
-    const dim = world.getDimension(player.dimension.id);
-    for (const checkLocation of checkLocations) {
-        if (checkLocation.y < -64 || checkLocation.y >= 320) continue; // Modern Bedrock world height limits
+    const dim = block.dimension;
+    for (const offset of directions) {
+        const checkPos = {
+            x: block.location.x + offset.x,
+            y: block.location.y + offset.y,
+            z: block.location.z + offset.z
+        };
+        if (checkPos.y < -64 || checkPos.y >= 320) continue;
 
         try {
-            const nearbyBlock = dim.getBlock(checkLocation);
-            if (nearbyBlock && protectedBlockTypes.has(nearbyBlock.typeId)) {
-                const inventory = nearbyBlock.getComponent('inventory') as any;
+            const adjacentBlock = dim.getBlock(checkPos);
+            if (adjacentBlock && protectedBlockTypes.has(adjacentBlock.typeId)) {
+                const inventory = adjacentBlock.getComponent('inventory') as any;
                 if (inventory && inventory.container) {
-                    const container = inventory.container;
-                    for (let i = 0; i < container.size; i++) {
-                        const item = container.getItem(i);
+                    for (let i = 0; i < inventory.container.size; i++) {
+                        const item = inventory.container.getItem(i);
                         if (item?.typeId === 'je:chest_lock_2') {
                             const lore = item.getLore();
                             const ownerName = lore[0]?.substring(2);
 
                             if (ownerName && ownerName !== player.name && !player.hasTag(config.adminTag)) {
-                                // Destroy the piston instantly
-                                dim.getBlock(block.location)?.setType("minecraft:air");
+                                // Destroy the hopper
+                                block.setType('minecraft:air');
                                 system.runTimeout(() => {
                                     player.playSound('note.bass');
-                                    player.sendMessage(`§e${ownerName} §clocked this area.`);
+                                    player.sendMessage(`§cYou cannot place hoppers adjacent to §e${ownerName}'s §clocked shop chest.`);
+                                    const playerInvComp = player.getComponent('inventory') as any;
+                                    if (playerInvComp && playerInvComp.container) {
+                                        playerInvComp.container.addItem(new ItemStack('minecraft:hopper', 1));
+                                    }
                                 }, 1);
                                 return;
                             }
@@ -55,32 +56,44 @@ world.afterEvents.playerPlaceBlock.subscribe(event => {
                 }
             }
         } catch (e) {
-            // Block might be in unloaded chunk, ignore
+            // Ignored
         }
     }
 });
 
-// 2. EXPLOSION PROTECTION FOR SHOP CONTAINERS
+// 2. EXPLOSION PROTECTION FOR SHOP CONTAINERS (PREVENTS CHEST DESTRUCTION WITHOUT CANCELLING THE WHOLE EXPLOSION)
 world.beforeEvents.explosion.subscribe(e => {
-    for (const blockPos of e.getImpactedBlocks()) {
+    const impacted = e.getImpactedBlocks();
+    const newImpacted: Block[] = [];
+    let modified = false;
+
+    for (const block of impacted) {
         try {
-            const block = e.dimension.getBlock(blockPos);
             if (block && protectedBlockTypes.has(block.typeId)) {
-                // Check if this chest has a lock inside
                 const inventory = block.getComponent('inventory') as any;
+                let isLocked = false;
                 if (inventory && inventory.container) {
                     for (let i = 0; i < inventory.container.size; i++) {
                         const item = inventory.container.getItem(i);
                         if (item?.typeId === 'je:chest_lock_2') {
-                            e.cancel = true;
-                            return;
+                            isLocked = true;
+                            break;
                         }
                     }
+                }
+                if (isLocked) {
+                    modified = true;
+                    continue; // Preserve this block by removing it from the blast impacts list
                 }
             }
         } catch (err) {
             // Ignored
         }
+        newImpacted.push(block);
+    }
+
+    if (modified) {
+        e.setImpactedBlocks(newImpacted);
     }
 });
 

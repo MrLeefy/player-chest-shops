@@ -3,7 +3,7 @@ import { ActionFormData, MessageFormData, ModalFormData } from '@minecraft/serve
 import config from './config';
 import { addScore, getScore, resetScore, setScore, subtractScore, iName, encode, romanize, displayFormat } from './utility';
 import { database, offlineSalesDB, serverDB } from './import';
-import { areItemsIdentical, processItems, uContainer, getPotionDisplayName } from './item';
+import { areItemsIdentical, processItems, uContainer, getPotionDisplayName, createItemStacks } from './item';
 
 const d: Record<number, string> = { 0: `minecraft:overworld`, 1: `minecraft:nether`, 2: `minecraft:the_end` };
 const dyes = ['minecraft:glow_ink_sac', 'minecraft:white_dye', 'minecraft:black_dye', 'minecraft:blue_dye', 'minecraft:brown_dye', 'minecraft:cyan_dye', 'minecraft:gray_dye', 'minecraft:green_dye', 'minecraft:light_blue_dye', 'minecraft:light_gray_dye', 'minecraft:lime_dye', 'minecraft:magenta_dye', 'minecraft:orange_dye', 'minecraft:pink_dye', 'minecraft:purple_dye', 'minecraft:red_dye', 'minecraft:yellow_dye'];
@@ -109,7 +109,7 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                     resetScore(player, 'signY');
                     resetScore(player, 'signZ');
 
-                    const targetSign = player.dimension.getBlock(signLoc);
+                    const targetSign = block.dimension.getBlock(signLoc);
                     const signComp = targetSign?.getComponent('sign') as any;
                     if (!signComp) {
                         player.sendMessage(' §cSign has been broken or missing. Try Again.');
@@ -317,7 +317,7 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
 
                             const itemsToGive: ItemStack[] = [];
                             for (const itemId in salesData) { 
-                                if (salesData[itemId] > 0) itemsToGive.push(new ItemStack(itemId, salesData[itemId])); 
+                                if (salesData[itemId] > 0) itemsToGive.push(...createItemStacks(itemId, salesData[itemId])); 
                             }
                             
                             let successfullyGiven: Record<string, number> = {};
@@ -375,10 +375,10 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                 system.runTimeout(async () => {
                     try {
                         if (data.startsWith('x', 0)) {
-                            let decode = /([xyz])(-?\d+)/g, match, vars: any = {};
-                            while ((match = decode.exec(data)) !== null) { vars[match[1]] = parseInt(match[2]); }
-                            let { x, y, z } = vars;
-                            let chest = player.dimension.getBlock({ x: x, y: y, z: z });
+                            let decode = /([xyz])(-?\d+)|d(\w+)/g, match, vars: any = {d: 'minecraft:overworld'};
+                            while ((match = decode.exec(data)) !== null) { if(match[3]) vars['d'] = match[3]; else vars[match[1]] = parseInt(match[2]); }
+                            let { x, y, z, d } = vars;
+                            let chest = world.getDimension(d).getBlock({ x: x, y: y, z: z });
                             const chestInventoryComp = chest?.getComponent('inventory') as any;
                             if (!chestInventoryComp || !chestInventoryComp.container) {
                                 player.sendMessage(' §cChest is missing or has been broken!§r');
@@ -487,7 +487,7 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
 
                             // --- ATOMIC TRANSACTION LOCK PHASE (PREVENT RACE CONDITIONS DURING VALUE CHECKS) ---
                             // Re-verify that chest block still exists and matches
-                            let activeChest = player.dimension.getBlock({ x: x, y: y, z: z });
+                            let activeChest = world.getDimension(d).getBlock({ x: x, y: y, z: z });
                             const activeChestInvComp = activeChest?.getComponent('inventory') as any;
                             if (!activeChestInvComp || !activeChestInvComp.container) {
                                 player.sendMessage(' §cChest was broken or deleted. Transaction canceled.§r');
@@ -502,6 +502,12 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                                 return;
                             }
                             const actRes = activeResult as any;
+
+                             if (!actRes.sell || !areItemsIdentical(sell, actRes.sell)) {
+                                 player.sendMessage(' §cShop item type changed. Transaction canceled.§r');
+                                 player.playSound('note.bass');
+                                 return;
+                             }
 
                             if (amount > actRes.itemAmount) { 
                                 player.sendMessage(` §cSorry, the stock is insufficient.§r`); 
@@ -639,12 +645,19 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                                 if (owner) {
                                     const ownerInvComp = owner.getComponent('inventory') as any;
                                     if (ownerInvComp && ownerInvComp.container) {
-                                        const leftover = ownerInvComp.container.addItem(new ItemStack(config.currency, total));
-                                        if (leftover && leftover.amount > 0) {
+                                        const payoutStacks = createItemStacks(config.currency, total);
+                                        let totalLeftover = 0;
+                                        for (const stack of payoutStacks) {
+                                            const leftover = ownerInvComp.container.addItem(stack);
+                                            if (leftover && leftover.amount > 0) {
+                                                totalLeftover += leftover.amount;
+                                            }
+                                        }
+                                        if (totalLeftover > 0) {
                                             let salesData = offlineSalesDB.get(ownerName) ?? {};
-                                            salesData[config.currency] = (salesData[config.currency] || 0) + leftover.amount;
+                                            salesData[config.currency] = (salesData[config.currency] || 0) + totalLeftover;
                                             offlineSalesDB.set(ownerName, salesData);
-                                            owner.sendMessage(`§cYour inventory was full! §f${leftover.amount}x ${currencyItemName} §cwas sent to your offline sales bank.`);
+                                            owner.sendMessage(`§cYour inventory was full! §f${totalLeftover}x ${currencyItemName} §cwas sent to your offline sales bank.`);
                                         }
                                     }
                                     owner.playSound('random.orb');

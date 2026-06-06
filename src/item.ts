@@ -372,3 +372,23 @@ export function uContainer(objContainer: Record<number, number>, amount: number)
     
     return [newCont, remaining];
 }
+
+export function createItemStacks(typeId: string, amount: number): ItemStack[] {
+    const stacks: ItemStack[] = [];
+    let remaining = amount;
+    
+    let maxStackSize = 64;
+    try {
+        const tempItem = new ItemStack(typeId, 1);
+        maxStackSize = tempItem.maxAmount;
+    } catch (e) {
+        console.warn(`Failed to determine max stack size for ${typeId}: ${e}`);
+    }
+
+    while (remaining > 0) {
+        const currentAmount = Math.min(remaining, maxStackSize);
+        stacks.push(new ItemStack(typeId, currentAmount));
+        remaining -= currentAmount;
+    }
+    return stacks;
+}
