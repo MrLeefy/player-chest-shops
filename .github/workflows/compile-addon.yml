@@ -3,7 +3,7 @@ name: Compile Addon
 on:
   push:
     branches:
-      - master
+      - main
     paths-ignore:
       - '**.mcaddon'
       - 'README.md'
@@ -40,7 +40,7 @@ jobs:
           rm LeefyChestShopBEH_$VERSION.mcpack LeefyChestShopRES_$VERSION.mcpack
           
           mkdir -p docs
-          echo "<!DOCTYPE html><html><head><meta http-equiv=\"refresh\" content=\"0; url=https://github.com/${{ github.repository }}/raw/master/leefychestshop_$VERSION.mcaddon\"></head><body>Redirecting to latest release...</body></html>" > docs/index.html
+          echo "<!DOCTYPE html><html><head><meta http-equiv=\"refresh\" content=\"0; url=https://github.com/${{ github.repository }}/raw/main/leefychestshop_$VERSION.mcaddon\"></head><body>Redirecting to latest release...</body></html>" > docs/index.html
 
       - name: Commit and Push
         run: |
@@ -51,7 +51,7 @@ jobs:
           git add -f docs/index.html
           if ! git diff --cached --quiet; then
             git commit -m "chore: auto-compile .mcaddon [skip ci]"
-            git push origin master
+            git push origin main
           else
             echo "No changes to the compiled addon."
           fi
