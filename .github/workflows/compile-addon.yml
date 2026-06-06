@@ -1,0 +1,57 @@
+name: Compile Addon
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.mcaddon'
+      - 'README.md'
+      - '.github/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Create .mcaddon File
+        run: |
+          VERSION=$(jq -r '.header.version | join(".")' "PlayerChestsBEH/manifest.json")
+          cd "PlayerChestsBEH" && zip -r ../LeefyChestShopBEH_$VERSION.mcpack * && cd ..
+          cd "PlayerChesRES" && zip -r ../LeefyChestShopRES_$VERSION.mcpack * && cd ..
+          zip -j leefychestshop_$VERSION.mcaddon LeefyChestShopBEH_$VERSION.mcpack LeefyChestShopRES_$VERSION.mcpack
+          rm LeefyChestShopBEH_$VERSION.mcpack LeefyChestShopRES_$VERSION.mcpack
+          
+          mkdir -p docs
+          echo "<!DOCTYPE html><html><head><meta http-equiv=\"refresh\" content=\"0; url=https://github.com/${{ github.repository }}/raw/master/leefychestshop_$VERSION.mcaddon\"></head><body>Redirecting to latest release...</body></html>" > docs/index.html
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git rm --cached "leefychestshop_*.mcaddon" || true
+          git add -f leefychestshop_*.mcaddon
+          git add -f docs/index.html
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: auto-compile .mcaddon [skip ci]"
+            git push origin master
+          else
+            echo "No changes to the compiled addon."
+          fi
