@@ -1,5 +1,5 @@
 // src/import.ts
-import { world as world5, system as system4 } from "@minecraft/server";
+import { world as world5, system as system5 } from "@minecraft/server";
 
 // src/config.ts
 var config = {
@@ -36,147 +36,446 @@ var config = {
 var config_default = config;
 
 // src/database.ts
-import { world } from "@minecraft/server";
-var MAX_PROPERTY_SIZE = 32e3;
-var DynamicPropertyDatabase = class {
-  #prefix;
-  #indexId;
-  #indexCache = null;
-  constructor(name) {
-    if (!name || typeof name !== "string") {
-      throw new Error("Database name must be a non-empty string.");
-    }
-    this.#prefix = `db:${name}:`;
-    this.#indexId = `${this.#prefix}__index__`;
+import { world, ScoreboardIdentityType, system } from "@minecraft/server";
+var { scoreboard } = world;
+var { FakePlayer } = ScoreboardIdentityType;
+var databases = /* @__PURE__ */ new Map();
+var DATABASE = {
+  MAX_CHANGES_BEFORE_CLEANUP: 1e3,
+  BATCH_SIZE: 10,
+  MAX_DATA_LENGTH: 3e4,
+  SPLIT_DELIMITER: "\n_`Split`_\n",
+  DEFAULT_SAVE_INTERVAL: 5
+};
+var split = DATABASE.SPLIT_DELIMITER;
+var CHUNK_SIZE = 150;
+var CHUNK_PREFIX = "__chunk__";
+var isShutdownRegistered = false;
+function safeSubstring(str, start, end) {
+  if (start >= str.length)
+    return "";
+  let adjStart = start;
+  if (start > 0 && isSurrogatePairAt(str, start - 1)) {
+    adjStart = start - 1;
   }
-  #getIndex() {
-    if (this.#indexCache) {
-      return this.#indexCache;
-    }
-    try {
-      const rawIndex = world.getDynamicProperty(this.#indexId);
-      this.#indexCache = typeof rawIndex === "string" ? JSON.parse(rawIndex) : {};
-      return this.#indexCache || {};
-    } catch (e) {
-      return {};
-    }
+  let adjEnd = end;
+  if (end < str.length && isSurrogatePairAt(str, end - 1)) {
+    adjEnd = end - 1;
   }
-  #setIndex(index) {
-    this.#indexCache = index;
-    world.setDynamicProperty(this.#indexId, JSON.stringify(index));
+  return str.substring(adjStart, adjEnd);
+}
+function isSurrogatePairAt(str, idx) {
+  const code = str.charCodeAt(idx);
+  return code >= 55296 && code <= 56319;
+}
+if (!isShutdownRegistered) {
+  isShutdownRegistered = true;
+}
+var DatabaseSavingModes = {
+  ONE_TIME_SAVE: "OneTimeSave",
+  END_TICK_SAVE: "EndTickSave",
+  TICK_INTERVAL: "TickInterval"
+};
+var ChangeAction = {
+  Change: 0,
+  Remove: 1
+};
+function run(thisClass, key, value, action) {
+  if (!thisClass._scoreboard_ || !thisClass._scoreboard_.isValid()) {
+    console.warn(`Database objective "${thisClass._nameId_}" was lost or invalid! Rebuilding...`);
+    thisClass.rebuild();
+    return;
   }
-  #clearProperties(key) {
-    const index = this.#getIndex();
-    const propIds = index[key];
-    if (!propIds)
-      return;
-    if (Array.isArray(propIds)) {
-      for (const chunkId of propIds) {
-        world.setDynamicProperty(chunkId, void 0);
+  if (thisClass._source_.has(key)) {
+    const oldParticipant = thisClass._source_.get(key);
+    if (Array.isArray(oldParticipant)) {
+      for (const p of oldParticipant) {
+        try {
+          thisClass._scoreboard_.removeParticipant(p);
+        } catch (e) {
+        }
       }
-    } else if (typeof propIds === "string") {
-      world.setDynamicProperty(propIds, void 0);
+    } else if (oldParticipant) {
+      try {
+        thisClass._scoreboard_.removeParticipant(oldParticipant);
+      } catch (e) {
+      }
     }
   }
-  set(key, value) {
-    const index = this.#getIndex();
-    const oldPropIds = index[key];
-    const serializedValue = JSON.stringify(value);
-    if (serializedValue.length > MAX_PROPERTY_SIZE) {
-      const chunks = [];
-      const propIds = [];
-      for (let i = 0; i < serializedValue.length; i += MAX_PROPERTY_SIZE) {
-        chunks.push(serializedValue.substring(i, i + MAX_PROPERTY_SIZE));
+  if (action === ChangeAction.Remove) {
+    thisClass._source_.delete(key);
+  } else {
+    if (value && value.isChunked) {
+      thisClass._source_.set(key, value.parts);
+      for (const part of value.parts) {
+        try {
+          thisClass._scoreboard_.setScore(part, 0);
+        } catch (e) {
+          console.error(`Failed to setScore for chunk in database "${thisClass.id}":`, e);
+        }
       }
-      chunks.forEach((chunk, i) => {
-        const chunkId = `${this.#prefix}${key}_chunk_${i}`;
-        world.setDynamicProperty(chunkId, chunk);
-        propIds.push(chunkId);
+    } else if (value) {
+      thisClass._source_.set(key, value.part);
+      try {
+        thisClass._scoreboard_.setScore(value.part, 0);
+      } catch (e) {
+        console.error(`Failed to setScore in database "${thisClass.id}":`, e);
+      }
+    }
+  }
+}
+var SavingModes = {
+  [DatabaseSavingModes.ONE_TIME_SAVE](thisClass, key, value, action) {
+    run(thisClass, key, value, action);
+  },
+  [DatabaseSavingModes.END_TICK_SAVE](thisClass, key, value, action) {
+    thisClass._changes_.set(key, { action, value });
+    thisClass.hasChanges = true;
+    if (!thisClass._saveScheduled_) {
+      thisClass._saveScheduled_ = true;
+      system.run(() => {
+        thisClass._saveScheduled_ = false;
+        thisClass._executeSave();
       });
-      index[key] = propIds;
-    } else {
-      const propId = `${this.#prefix}${key}`;
-      world.setDynamicProperty(propId, serializedValue);
-      index[key] = propId;
     }
-    if (oldPropIds) {
-      if (Array.isArray(oldPropIds)) {
-        for (const chunkId of oldPropIds) {
-          const isReused = Array.isArray(index[key]) ? index[key].includes(chunkId) : index[key] === chunkId;
-          if (!isReused) {
-            world.setDynamicProperty(chunkId, void 0);
+  },
+  [DatabaseSavingModes.TICK_INTERVAL](thisClass, key, value, action) {
+    thisClass._changes_.set(key, { action, value });
+    thisClass.hasChanges = true;
+  }
+};
+var ScoreboardDatabaseManager = class extends Map {
+  _loaded_ = false;
+  _saveMode_;
+  hasChanges = false;
+  _loadingPromise_ = null;
+  _saveScheduled_ = false;
+  _nameId_;
+  interval;
+  _scoreboard_;
+  _source_;
+  _changes_;
+  _maxChanges_;
+  _lastCleanup_;
+  _intervalId;
+  get maxLength() {
+    return DATABASE.MAX_DATA_LENGTH;
+  }
+  get _parser_() {
+    return JSON;
+  }
+  get savingMode() {
+    return this._saveMode_;
+  }
+  constructor(objective, saveMode = DatabaseSavingModes.END_TICK_SAVE, interval = 5) {
+    super();
+    let namespacedObjective;
+    if (typeof objective === "string") {
+      namespacedObjective = objective.startsWith("cs_db:") ? objective : `cs_db:${objective}`;
+    } else {
+      namespacedObjective = objective;
+    }
+    this._saveMode_ = saveMode;
+    this._nameId_ = typeof namespacedObjective === "string" ? namespacedObjective : namespacedObjective.id;
+    this.interval = interval ?? 5;
+    if (!namespacedObjective)
+      throw new RangeError("First parameter is not valid: " + namespacedObjective);
+    this._scoreboard_ = typeof namespacedObjective === "string" ? scoreboard.getObjective(namespacedObjective) ?? scoreboard.addObjective(namespacedObjective, namespacedObjective) : namespacedObjective;
+    const existingInstance = databases.get(this.id);
+    if (existingInstance)
+      return existingInstance;
+    this._nameId_ = this.id;
+    this._source_ = /* @__PURE__ */ new Map();
+    this._changes_ = /* @__PURE__ */ new Map();
+    this._maxChanges_ = DATABASE.MAX_CHANGES_BEFORE_CLEANUP;
+    this._lastCleanup_ = Date.now();
+    if (this._saveMode_ === DatabaseSavingModes.TICK_INTERVAL) {
+      this._intervalId = system.runInterval(() => {
+        if (this.hasChanges && !this._saveScheduled_) {
+          this._saveScheduled_ = true;
+          system.run(() => {
+            this._saveScheduled_ = false;
+            this._executeSave();
+          });
+        }
+      }, this.interval);
+    }
+    databases.set(this.id, this);
+  }
+  // Lightweight self-healing audit on reads
+  _assertObjectiveValid() {
+    if (!this._scoreboard_ || !this._scoreboard_.isValid()) {
+      console.warn(`[Database] Read audit failed! Objective "${this._nameId_}" was lost. Recovering...`);
+      this.rebuild();
+    }
+  }
+  load() {
+    if (this._loaded_)
+      return this;
+    const chunkedData = /* @__PURE__ */ new Map();
+    this._source_ = /* @__PURE__ */ new Map();
+    super.clear();
+    this._assertObjectiveValid();
+    for (const participant of this._scoreboard_.getParticipants()) {
+      const { displayName, type } = participant;
+      if (type !== FakePlayer)
+        continue;
+      if (displayName.startsWith(CHUNK_PREFIX + split)) {
+        const parts = displayName.split(split);
+        if (parts.length >= 5) {
+          const [, key, indexStr, totalStr, ...restData] = parts;
+          const index = parseInt(indexStr, 10);
+          const total = parseInt(totalStr, 10);
+          const data = restData.join(split);
+          if (isNaN(index) || isNaN(total))
+            continue;
+          if (!chunkedData.has(key))
+            chunkedData.set(key, []);
+          chunkedData.get(key).push({ index, total, data, rawName: displayName });
+        }
+      } else {
+        const parts = displayName.split(split);
+        if (parts.length >= 2) {
+          const key = parts[0];
+          const data = parts.slice(1).join(split);
+          this._source_.set(key, displayName);
+          try {
+            super.set(key, this._parser_.parse(data));
+          } catch (e) {
+            console.error(`Error parsing data for key "${key}":`, e);
           }
         }
-      } else if (typeof oldPropIds === "string" && index[key] !== oldPropIds) {
-        world.setDynamicProperty(oldPropIds, void 0);
       }
     }
-    this.#setIndex(index);
+    for (const [key, chunks] of chunkedData.entries()) {
+      const uniqueChunks = /* @__PURE__ */ new Map();
+      for (const c of chunks) {
+        uniqueChunks.set(c.index, c);
+      }
+      const sortedChunks = Array.from(uniqueChunks.values()).sort((a, b) => a.index - b.index);
+      this._source_.set(key, sortedChunks.map((c) => c.rawName));
+      if (sortedChunks.length > 0 && sortedChunks.length === sortedChunks[0].total) {
+        const mergedData = sortedChunks.map((c) => c.data).join("");
+        try {
+          super.set(key, this._parser_.parse(mergedData));
+        } catch (e) {
+          console.error(`Error parsing chunked data for key "${key}":`, e);
+        }
+      } else {
+        console.error(`Incomplete chunked data for key "${key}": expected ${sortedChunks[0]?.total} chunks, got ${sortedChunks.length}`);
+      }
+    }
+    this._loaded_ = true;
     return this;
   }
-  get(key) {
-    const index = this.#getIndex();
-    const propIds = index[key];
-    if (!propIds) {
-      return void 0;
-    }
-    try {
-      if (Array.isArray(propIds)) {
-        const chunks = propIds.map((chunkId) => world.getDynamicProperty(chunkId));
-        return JSON.parse(chunks.join(""));
-      } else if (typeof propIds === "string") {
-        const rawVal = world.getDynamicProperty(propIds);
-        return typeof rawVal === "string" ? JSON.parse(rawVal) : void 0;
+  loadAsync() {
+    if (this._loaded_)
+      return this._loadingPromise_ ?? Promise.resolve(this);
+    const promise = (async () => {
+      return this.load();
+    })();
+    this._loadingPromise_ = promise;
+    return promise;
+  }
+  set(key, value) {
+    if (!this._loaded_)
+      throw new ReferenceError("Database is not loaded");
+    this._assertObjectiveValid();
+    const serializedValue = this._parser_.stringify(value);
+    const singleParticipantString = `${key}${split}${serializedValue}`;
+    let changeValue;
+    if (singleParticipantString.length <= 240) {
+      changeValue = { isChunked: false, part: singleParticipantString };
+    } else {
+      const totalChunks = Math.ceil(serializedValue.length / CHUNK_SIZE);
+      if (serializedValue.length > this.maxLength) {
+        throw new RangeError(`Value is too large: ${serializedValue.length} characters (max: ${this.maxLength})`);
       }
-    } catch (e) {
-      console.warn(`[Database] Failed to get or parse value for key "${key}":`, e);
-      return void 0;
+      const parts = [];
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkData = safeSubstring(serializedValue, i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        const partString = `${CHUNK_PREFIX}${split}${key}${split}${i}${split}${totalChunks}${split}${chunkData}`;
+        if (partString.length > 256) {
+          throw new RangeError(`Key name "${key}" is too long for the chunking system`);
+        }
+        parts.push(partString);
+      }
+      changeValue = { isChunked: true, parts };
     }
+    super.set(key, value);
+    this._onChange_(key, changeValue, ChangeAction.Change);
+    return this;
   }
   delete(key) {
-    const index = this.#getIndex();
-    if (!index.hasOwnProperty(key)) {
-      return false;
-    }
-    this.#clearProperties(key);
-    delete index[key];
-    this.#setIndex(index);
+    if (!this._loaded_)
+      throw new ReferenceError("Database is not loaded");
+    this._assertObjectiveValid();
+    const changeValue = null;
+    super.delete(key);
+    this._onChange_(key, changeValue, ChangeAction.Remove);
     return true;
   }
-  has(key) {
-    const index = this.#getIndex();
-    return index.hasOwnProperty(key);
-  }
   clear() {
-    const index = this.#getIndex();
-    for (const key in index) {
-      this.#clearProperties(key);
+    if (!this._loaded_)
+      throw new ReferenceError("Database is not loaded");
+    for (const key of this.keys()) {
+      this.delete(key);
     }
-    this.#setIndex({});
-  }
-  keys() {
-    return Object.keys(this.#getIndex());
-  }
-  values() {
-    return this.keys().map((key) => this.get(key));
-  }
-  entries() {
-    return this.keys().map((key) => [key, this.get(key)]);
   }
   forEach(callback) {
+    if (!this._loaded_)
+      throw new ReferenceError("Database is not loaded");
+    this._assertObjectiveValid();
     for (const [key, value] of this.entries()) {
-      callback(value, key);
+      callback(value, key, this);
     }
+  }
+  keys() {
+    if (!this._loaded_)
+      throw new ReferenceError("Database is not loaded");
+    this._assertObjectiveValid();
+    return super.keys();
+  }
+  values() {
+    if (!this._loaded_)
+      throw new ReferenceError("Database is not loaded");
+    this._assertObjectiveValid();
+    return super.values();
+  }
+  get length() {
+    this._assertObjectiveValid();
+    return super.size;
+  }
+  _onChange_(key, value, action) {
+    if (!this._loaded_)
+      throw new ReferenceError("Database is not loaded");
+    if (this._changes_.size > this._maxChanges_) {
+      this._cleanupChanges();
+    }
+    SavingModes[this._saveMode_](this, key, value, action);
+  }
+  _cleanupChanges() {
+    try {
+      this._executeSave();
+      this._lastCleanup_ = Date.now();
+    } catch (error) {
+      console.error(`Error during change cleanup: ${error}`);
+    }
+  }
+  _executeSave() {
+    if (this._changes_.size === 0)
+      return;
+    const pending = new Map(this._changes_);
+    this._changes_.clear();
+    this.hasChanges = false;
+    for (const [k, { action, value }] of pending.entries()) {
+      try {
+        run(this, k, value, action);
+      } catch (error) {
+        console.error(`Error saving key "${k}" in database "${this.id}":`, error);
+      }
+    }
+  }
+  _clearInMemory() {
+    super.clear();
+    this._source_.clear();
+    this.hasChanges = false;
+  }
+  get objective() {
+    return this._scoreboard_;
+  }
+  get id() {
+    return this._scoreboard_.id;
+  }
+  get loaded() {
+    return this._loaded_;
+  }
+  get type() {
+    return "DefaultJsonType";
+  }
+  get loadingAwaiter() {
+    return this._loadingPromise_ ?? this.loadAsync();
+  }
+  cleanup() {
+    if (this._loaded_) {
+      this._cleanupChanges();
+    }
+    return this;
+  }
+  getStats() {
+    return {
+      size: this.length,
+      pendingChanges: this._changes_.size,
+      loaded: this._loaded_,
+      saveMode: this._saveMode_,
+      lastCleanup: this._lastCleanup_,
+      id: this.id
+    };
+  }
+  rebuild() {
+    if (this.objective?.isValid())
+      return this;
+    try {
+      const entries = Array.from(super.entries());
+      const pendingBackup = new Map(this._changes_);
+      this._clearInMemory();
+      try {
+        const existingObj = scoreboard.getObjective(this._nameId_);
+        if (existingObj) {
+          scoreboard.removeObjective(this._nameId_);
+        }
+      } catch (e) {
+      }
+      const newScores = scoreboard.addObjective(this._nameId_, this._nameId_);
+      this._scoreboard_ = newScores;
+      for (const [k, v] of entries) {
+        try {
+          const serializedValue = this._parser_.stringify(v);
+          const singleStr = `${k}${split}${serializedValue}`;
+          if (singleStr.length <= 240) {
+            newScores.setScore(singleStr, 0);
+            this._source_.set(k, singleStr);
+          } else {
+            const totalChunks = Math.ceil(serializedValue.length / CHUNK_SIZE);
+            const parts = [];
+            for (let i = 0; i < totalChunks; i++) {
+              const chunkData = safeSubstring(serializedValue, i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+              const partString = `${CHUNK_PREFIX}${split}${k}${split}${i}${split}${totalChunks}${split}${chunkData}`;
+              parts.push(partString);
+              newScores.setScore(partString, 0);
+            }
+            this._source_.set(k, parts);
+          }
+          super.set(k, v);
+        } catch (entryError) {
+          console.error(`Error rebuilding entry "${k}" in database "${this._nameId_}":`, entryError);
+        }
+      }
+      this._changes_ = pendingBackup;
+      if (this._changes_.size > 0)
+        this.hasChanges = true;
+    } catch (error) {
+      console.error(`Critical error during database rebuild: ${error}`);
+    }
+    return this;
+  }
+  async rebuildAsync() {
+    return this.rebuild();
+  }
+};
+var JsonDatabase = class extends ScoreboardDatabaseManager {
+  get type() {
+    return "JsonType";
   }
 };
 var Database = class {
   #onSetCallback = [];
   Database;
   constructor(name) {
-    this.Database = new DynamicPropertyDatabase(name);
+    this.Database = new JsonDatabase(name).load();
   }
   get length() {
-    return this.Database.keys().length;
+    return this.Database.length;
   }
   get(key) {
     return this.Database.get(key);
@@ -195,13 +494,13 @@ var Database = class {
     this.Database.clear();
   }
   keys() {
-    return this.Database.keys();
+    return Array.from(this.Database.keys());
   }
   values() {
-    return this.Database.values();
+    return Array.from(this.Database.values());
   }
   entries() {
-    return this.Database.entries();
+    return Array.from(this.Database.entries());
   }
   forEach(callback) {
     this.Database.forEach((value, key) => callback(value, key));
@@ -221,7 +520,7 @@ var Database = class {
 };
 
 // src/utility.ts
-import { world as world2, system, Player } from "@minecraft/server";
+import { world as world2, system as system2, Player } from "@minecraft/server";
 function getScore(participant, objectiveId) {
   try {
     const objective = world2.scoreboard.getObjective(objectiveId);
@@ -314,7 +613,7 @@ function resetScore(participant, objectiveId) {
 }
 function setTimeout(callback, delayMs) {
   const ticks = Math.max(1, Math.round(delayMs / 50));
-  return system.runTimeout(callback, ticks);
+  return system2.runTimeout(callback, ticks);
 }
 function iName(str) {
   if (!str)
@@ -680,7 +979,7 @@ function createItemStacks(typeId, amount) {
 }
 
 // src/protection.ts
-import { world as world3, system as system2, Player as Player2, ItemStack as ItemStack2 } from "@minecraft/server";
+import { world as world3, system as system3, Player as Player2, ItemStack as ItemStack2 } from "@minecraft/server";
 var protectedBlockTypes = new Set(config_default.containers);
 world3.afterEvents.playerPlaceBlock.subscribe((event) => {
   try {
@@ -716,7 +1015,7 @@ world3.afterEvents.playerPlaceBlock.subscribe((event) => {
                 const ownerName = lore[0]?.substring(2);
                 if (ownerName && ownerName !== player.name && !player.hasTag(config_default.adminTag)) {
                   block.setType("minecraft:air");
-                  system2.runTimeout(() => {
+                  system3.runTimeout(() => {
                     player.playSound("note.bass");
                     player.sendMessage(`\xA7cYou cannot place hoppers adjacent to \xA7e${ownerName}'s \xA7clocked shop chest.`);
                     const playerInvComp = player.getComponent("inventory");
@@ -851,7 +1150,7 @@ world3.beforeEvents.playerBreakBlock.subscribe((a) => {
           if (isShopSign) {
             if (player.name !== ownerName && !player.hasTag(config_default.adminTag)) {
               a.cancel = true;
-              system2.runTimeout(() => {
+              system3.runTimeout(() => {
                 player.onScreenDisplay.setActionBar("\xA7cYou can't break this sign.\n\xA7eInteract to refresh shop");
               }, 1);
             } else {
@@ -881,7 +1180,7 @@ world3.beforeEvents.playerBreakBlock.subscribe((a) => {
             const ownerName = lore?.[0]?.substring(2);
             if (ownerName && player.name !== ownerName && !player.hasTag(config_default.adminTag)) {
               a.cancel = true;
-              system2.runTimeout(() => {
+              system3.runTimeout(() => {
                 player.playSound("note.bass");
                 player.onScreenDisplay.setActionBar(`\xA7cThis chest is protected by \xA7e${ownerName}`);
               }, 1);
@@ -902,7 +1201,7 @@ world3.beforeEvents.playerBreakBlock.subscribe((a) => {
             const ownerName = lore?.[0]?.substring(2);
             if (ownerName && a.player.name !== ownerName && !a.player.hasTag(config_default.adminTag)) {
               a.cancel = true;
-              system2.runTimeout(() => {
+              system3.runTimeout(() => {
                 a.player.playSound("note.bass");
                 a.player.onScreenDisplay.setActionBar(`\xA7cThis area is protected by \xA7e${ownerName}`);
               }, 1);
@@ -933,7 +1232,7 @@ world3.beforeEvents.playerBreakBlock.subscribe((a) => {
             const isShopSign = text.includes(config_default.currencySymbol) || config_default.currencyType === "item" && text.includes(iName(config_default.currency));
             if (isShopSign && owner !== a.player.name && !a.player.hasTag(config_default.adminTag)) {
               a.cancel = true;
-              system2.runTimeout(() => {
+              system3.runTimeout(() => {
                 a.player.playSound("note.bass");
                 a.player.onScreenDisplay.setActionBar(`\xA7cThis block is protected by \xA77${owner}`);
               }, 1);
@@ -967,7 +1266,7 @@ world3.beforeEvents.playerInteractWithBlock.subscribe((t) => {
             const ownerName = lore?.[0]?.substring(2);
             if (ownerName && player.name !== ownerName && !player.hasTag(config_default.adminTag)) {
               t.cancel = true;
-              system2.runTimeout(() => {
+              system3.runTimeout(() => {
                 player.playSound("note.bass");
                 player.onScreenDisplay.setActionBar(`\xA7e${ownerName} \xA7clocked this chest.`);
               }, 1);
@@ -987,7 +1286,7 @@ world3.beforeEvents.itemUse.subscribe(({ source, itemStack }) => {
       return;
     if (itemStack.typeId !== "je:chest_lock_1" && itemStack.typeId !== "je:chest_lock_2")
       return;
-    system2.runTimeout(() => {
+    system3.runTimeout(() => {
       try {
         const playerInv = source.getComponent("inventory");
         if (!playerInv || !playerInv.container)
@@ -1014,7 +1313,7 @@ world3.beforeEvents.itemUse.subscribe(({ source, itemStack }) => {
 });
 
 // src/shop.ts
-import { ItemStack as ItemStack3, Player as Player3, world as world4, system as system3 } from "@minecraft/server";
+import { ItemStack as ItemStack3, Player as Player3, world as world4, system as system4 } from "@minecraft/server";
 import { ActionFormData, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 var d = { 0: `minecraft:overworld`, 1: `minecraft:nether`, 2: `minecraft:the_end` };
 var dyes = ["minecraft:glow_ink_sac", "minecraft:white_dye", "minecraft:black_dye", "minecraft:blue_dye", "minecraft:brown_dye", "minecraft:cyan_dye", "minecraft:gray_dye", "minecraft:green_dye", "minecraft:light_blue_dye", "minecraft:light_gray_dye", "minecraft:lime_dye", "minecraft:magenta_dye", "minecraft:orange_dye", "minecraft:pink_dye", "minecraft:purple_dye", "minecraft:red_dye", "minecraft:yellow_dye"];
@@ -1025,7 +1324,7 @@ function createAndShowModalForm(player, title, textFieldPrompt, textFieldPlaceho
   return form.show(player);
 }
 function bind(hitBlock, player) {
-  system3.runTimeout(() => {
+  system4.runTimeout(() => {
     let { x, y, z } = hitBlock.location;
     let sD = hitBlock.dimension.id == "minecraft:overworld" ? 0 : hitBlock.dimension.id == "minecraft:nether" ? 1 : 2;
     setScore(player, "signX", x);
@@ -1072,7 +1371,7 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((sign) => {
     if (player.hasTag("binding") && block.getComponent("inventory") && protectedBlockTypes2.has(block.typeId)) {
       sign.cancel = true;
       activeTransactions.set(coordsKey, true);
-      system3.runTimeout(() => {
+      system4.runTimeout(() => {
         try {
           const inventoryComp = block.getComponent("inventory");
           const chestInv = inventoryComp?.container;
@@ -1133,7 +1432,7 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((sign) => {
           }
           let exT = `${encode(`x${block.location.x}y${block.location.y}z${block.location.z}r`)}`;
           let text = signComp.getText().replace("\xA7b\xA7i\xA7n\xA7d\xA7r", exT);
-          let split = text.split("\n");
+          let split2 = text.split("\n");
           if (hasNametag) {
             itemName = "\xA7o" + itemName;
           }
@@ -1143,10 +1442,10 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((sign) => {
             let more = enchantAmount > 1 ? "+" : "";
             itemName = `\xA7o\xA75${enchantName} \xA7r\xA7o${romanize(enchants[Object.keys(enchants)[0]])} \xA7l\xA72${more}\xA7r`;
           }
-          let earn = split[1].substring(0, split[1].indexOf(`\xA7r`));
-          split[1] = `${earn}\xA7r${itemName}`;
-          split[3] = itemAmount > 0 ? `${itemAmount}x left\xA7r` : "\xA7l\xA74OUT OF STOCK\xA7r";
-          text = split.join("\n");
+          let earn = split2[1].substring(0, split2[1].indexOf(`\xA7r`));
+          split2[1] = `${earn}\xA7r${itemName}`;
+          split2[3] = itemAmount > 0 ? `${itemAmount}x left\xA7r` : "\xA7l\xA74OUT OF STOCK\xA7r";
+          text = split2.join("\n");
           signComp.setText(text);
           player.sendMessage(`\uE200 \xA7bBinding Mode: \xA7aChest & Sign Binded.\xA7r
 \xA77Chest Location:\xA7r ${block.location.x} ${block.location.y} ${block.location.z}
@@ -1167,9 +1466,9 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((sign) => {
       let text = content.getText();
       if (!text)
         return;
-      let split = text.split("\n");
-      let data = split[0].substring(0, split[0].indexOf(`\xA7r||`)).replace(/§/g, "").toLowerCase();
-      let ownerName = split[0].substring(split[0].indexOf(`|`), split[0].length - 4).replace(/[|]/g, "").trim();
+      let split2 = text.split("\n");
+      let data = split2[0].substring(0, split2[0].indexOf(`\xA7r||`)).replace(/§/g, "").toLowerCase();
+      let ownerName = split2[0].substring(split2[0].indexOf(`|`), split2[0].length - 4).replace(/[|]/g, "").trim();
       if (data && dyes.includes(sign.itemStack?.typeId || "") && player.name == ownerName) {
         sign.cancel = false;
         return;
@@ -1177,10 +1476,10 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((sign) => {
       if (data) {
         sign.cancel = true;
       }
-      if (config_default.signConfig.includes(split[0].toLowerCase())) {
+      if (config_default.signConfig.includes(split2[0].toLowerCase())) {
         sign.cancel = true;
         activeTransactions.set(coordsKey, true);
-        system3.runTimeout(() => {
+        system4.runTimeout(() => {
           let limit = getScore(player, "signL");
           let count = getScore(player, "signC");
           if (count >= limit) {
@@ -1221,7 +1520,7 @@ ${priceDisplay}\xA7r
       if ((player.isSneaking || isStick) && data.startsWith("x", 0) && (player.name == ownerName || player.hasTag(config_default.adminTag))) {
         sign.cancel = true;
         activeTransactions.set(coordsKey, true);
-        system3.runTimeout(async () => {
+        system4.runTimeout(async () => {
           try {
             if (!data.startsWith("x", 0))
               return;
@@ -1281,12 +1580,12 @@ ${priceDisplay}\xA7r
               let more = Object.keys(enchants).length > 1 ? "+" : "";
               itemName = `\xA7o\xA75${enchantName} \xA7r\xA7o${romanize(enchants[Object.keys(enchants)[0]])} \xA7l\xA72${more}\xA7r`;
             }
-            let earnText = split[1].substring(0, split[1].indexOf(`\xA7r`));
+            let earnText = split2[1].substring(0, split2[1].indexOf(`\xA7r`));
             let oldText = content?.getText().split("\n");
-            split[1] = `${earnText}\xA7r${itemName}`;
-            split[3] = itemAmount > 0 ? `${itemAmount}x left\xA7r` : "\xA7l\xA74OUT OF STOCK\xA7r";
-            content.setText(split.join("\n"));
-            if (split[3] !== oldText[3] || split[1] !== oldText[1]) {
+            split2[1] = `${earnText}\xA7r${itemName}`;
+            split2[3] = itemAmount > 0 ? `${itemAmount}x left\xA7r` : "\xA7l\xA74OUT OF STOCK\xA7r";
+            content.setText(split2.join("\n"));
+            if (split2[3] !== oldText[3] || split2[1] !== oldText[1]) {
               player.onScreenDisplay.setActionBar("\xA7aSign Stock Updated");
               player.playSound("note.hat");
               return;
@@ -1305,7 +1604,7 @@ Chest Location:\xA77 ${x} ${y} ${z}\xA7r
 
 \uE102 \xA77Stock Left:\xA7r ${itemAmount}x
 
-\uE102 \xA77price each:\xA7r ${split[2]}
+\uE102 \xA77price each:\xA7r ${split2[2]}
 
 \xA73TOTAL INCOME SALES: \xA7e \xA7r${incomeDisplay}
 
@@ -1334,8 +1633,8 @@ Price ${config_default.currencySymbol}`, "Type your price here", "10").then((e) 
                   return;
                 }
                 const priceDisplay = config_default.currencyType === "item" ? `${price}x ${iName(config_default.currency)}` : `${config_default.currencySymbol}${price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
-                split[2] = `${priceDisplay}\xA7r`;
-                content.setText(split.join("\n"));
+                split2[2] = `${priceDisplay}\xA7r`;
+                content.setText(split2.join("\n"));
                 player.sendMessage("\uE200 \xA7aPrice successfully updated.\xA7r");
                 player.playSound("note.hat");
               });
@@ -1407,14 +1706,14 @@ Price ${config_default.currencySymbol}`, "Type your price here", "10").then((e) 
       if (data.startsWith("x", 0) || data == "bind") {
         sign.cancel = true;
         if (config_default.currencyType === "scoreboard") {
-          system3.runTimeout(() => {
+          system4.runTimeout(() => {
             addScore(player, config_default.currency, 0);
           }, 1);
         }
         if ((player.name == ownerName || player.hasTag(config_default.adminTag)) && player.isSneaking)
           return;
         activeTransactions.set(coordsKey, true);
-        system3.runTimeout(async () => {
+        system4.runTimeout(async () => {
           try {
             if (data.startsWith("x", 0)) {
               let decode = /([xyz])(-?\d+)|d(\w+)/g, match, vars = { d: "minecraft:overworld" };
@@ -1480,17 +1779,17 @@ Price ${config_default.currencySymbol}`, "Type your price here", "10").then((e) 
                 let more = Object.keys(enchants).length > 1 ? "+" : "";
                 itemName = `\xA7o\xA75${enchantName} \xA7r\xA7o${romanize(enchants[Object.keys(enchants)[0]])} \xA7l\xA72${more}\xA7r`;
               }
-              let earnText = split[1].substring(0, split[1].indexOf(`\xA7r`));
+              let earnText = split2[1].substring(0, split2[1].indexOf(`\xA7r`));
               let oldText = content?.getText().split("\n");
-              split[1] = `${earnText}\xA7r${itemName}`;
-              split[3] = itemAmount > 0 ? `${itemAmount}x left\xA7r` : "\xA7l\xA74OUT OF STOCK\xA7r";
-              content.setText(split.join("\n"));
-              if (split[3] !== oldText[3] || split[1] !== oldText[1]) {
+              split2[1] = `${earnText}\xA7r${itemName}`;
+              split2[3] = itemAmount > 0 ? `${itemAmount}x left\xA7r` : "\xA7l\xA74OUT OF STOCK\xA7r";
+              content.setText(split2.join("\n"));
+              if (split2[3] !== oldText[3] || split2[1] !== oldText[1]) {
                 player.onScreenDisplay.setActionBar("\xA7aSign Stock Updated");
                 player.playSound("note.hat");
                 return;
               }
-              if (split[3] == "\xA7l\xA74OUT OF STOCK\xA7r") {
+              if (split2[3] == "\xA7l\xA74OUT OF STOCK\xA7r") {
                 player.playSound("note.bass");
                 return;
               }
@@ -1541,7 +1840,7 @@ ${itemLore}
               }
               formText += ` \xA77Stock Left:\xA7r ${itemAmount}x
 
- \xA77price each:\xA7r ${split[2]}
+ \xA77price each:\xA7r ${split2[2]}
 
 How many do you want to buy?`;
               buy.textField(formText, "Type amount here", "1");
@@ -1580,7 +1879,7 @@ How many do you want to buy?`;
                 player.playSound("note.bass");
                 return;
               }
-              const priceVal = parseInt(split[2].replace(/\D/g, "")) || 0;
+              const priceVal = parseInt(split2[2].replace(/\D/g, "")) || 0;
               const total = priceVal * amount;
               const playerInvComp = player.getComponent("inventory");
               const inv = playerInvComp?.container;
@@ -1669,10 +1968,10 @@ How many do you want to buy?`;
                   }
                 }
               }
-              split[3] = newStock > 0 ? `${newStock}x left\xA7r` : "\xA7l\xA74OUT OF STOCK\xA7r";
-              let totalEarned = parseInt(split[1].substring(0, split[1].indexOf(`\xA7r`)).replace(/\D/g, "")) || 0;
-              split[1] = `${encode(`${totalEarned + total}`)}\xA7r${itemName}`;
-              content.setText(split.join("\n"));
+              split2[3] = newStock > 0 ? `${newStock}x left\xA7r` : "\xA7l\xA74OUT OF STOCK\xA7r";
+              let totalEarned = parseInt(split2[1].substring(0, split2[1].indexOf(`\xA7r`)).replace(/\D/g, "")) || 0;
+              split2[1] = `${encode(`${totalEarned + total}`)}\xA7r${itemName}`;
+              content.setText(split2.join("\n"));
               player.playSound("random.orb");
               let purchaseMessage = "", actionBarMessage = "";
               const owner = world4.getAllPlayers().find((p) => p.name == ownerName);
@@ -1740,7 +2039,7 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((t) => {
   if (!(t.player instanceof Player3))
     return;
   let player = t.player;
-  system3.runTimeout(() => {
+  system4.runTimeout(() => {
     setScore(player, "signL", 1 * getScore(player, "rank"));
     if (config_default.currencyType === "scoreboard")
       addScore(player, "signC", 0);
@@ -1760,8 +2059,8 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((t) => {
   let text = signComp?.getText();
   if (!text)
     return;
-  let split = text.split("\n");
-  let firstLine = split[0];
+  let split2 = text.split("\n");
+  let firstLine = split2[0];
   if (!firstLine.includes("||"))
     return;
   let data = firstLine.substring(0, firstLine.indexOf(`\xA7r||`)).replace(/§/g, "").toLowerCase();
@@ -1776,7 +2075,7 @@ world4.beforeEvents.playerInteractWithBlock.subscribe((t) => {
     if (!chestInventoryComp || !chestInventoryComp.container)
       return;
     const processResult = processItems(chestInventoryComp.container);
-    system3.runTimeout(() => {
+    system4.runTimeout(() => {
       const signLines = signComp.getText().split("\n");
       let itemAmount = 0, itemName = "", enchants = {}, hasNametag = false, sell = null;
       const existingItemName = signLines[1].substring(signLines[1].indexOf("\xA7r") + 2);
@@ -1888,7 +2187,7 @@ world4.beforeEvents.itemUse.subscribe((event) => {
       return;
     if (itemStack.typeId === "minecraft:stick" && source.isSneaking && source.hasTag(config_default.adminTag)) {
       event.cancel = true;
-      system3.run(() => {
+      system4.run(() => {
         try {
           showCurrencyConfigurationForm(source);
         } catch (err) {
@@ -1933,13 +2232,13 @@ function initializeWorld() {
   });
   console.log("\xA7a[PlayerShop] World setup complete. Scoreboards and gamerules initialized.");
 }
-system4.runTimeout(() => {
+system5.runTimeout(() => {
   initializeWorld();
 }, 10);
 world5.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn)
     return;
-  system4.runTimeout(() => {
+  system5.runTimeout(() => {
     try {
       if (!player.isValid())
         return;

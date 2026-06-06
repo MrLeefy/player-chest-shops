@@ -118,7 +118,7 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                     }
                     
                     const processResult = processItems(chestInv);
-                    let itemAmount = 0, itemName = "§cNo Item Yet§r", hasNametag = false, enchants = {}, sell: any = null;
+                    let itemAmount = 0, itemName = "§cNo Item Yet§r", hasNametag = false, enchants: Record<string, number> = {}, sell: any = null;
                     if ('error' in processResult && processResult.error) {
                         if (processResult.error === "SHOP EMPTY") {
                             // Empty chest is allowed at creation - defaults to "No Item Yet"
@@ -244,7 +244,7 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                         }
                         
                         const processResult = processItems(chestInventoryComp.container);
-                        let itemAmount = 0, itemName = "", enchants = {}, sell: any = null, hasNametag = false;
+                        let itemAmount = 0, itemName = "", enchants: Record<string, number> = {}, sell: any = null, hasNametag = false;
                         const signLines = content.getText().split('\n');
                         const existingItemName = signLines[1].substring(signLines[1].indexOf('§r') + 2);
 
@@ -425,7 +425,7 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
 
                             const container = chestInventoryComp.container as Container;
                             const processResult = processItems(container);
-                            let itemAmount = 0, itemName = "", enchants = {}, sell: any = null, hasNametag = false;
+                            let itemAmount = 0, itemName = "", enchants: Record<string, number> = {}, sell: any = null, hasNametag = false;
                             const signLines = content.getText().split('\n');
 
                             if ('error' in processResult && processResult.error) {
@@ -778,7 +778,7 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
         const processResult = processItems(chestInventoryComp.container);
         system.runTimeout(() => {
             const signLines = signComp.getText().split('\n');
-            let itemAmount = 0, itemName = "", enchants = {}, hasNametag = false, sell: any = null;
+            let itemAmount = 0, itemName = "", enchants: Record<string, number> = {}, hasNametag = false, sell: any = null;
             const existingItemName = signLines[1].substring(signLines[1].indexOf('§r') + 2);
 
             if ('error' in processResult && processResult.error) {
