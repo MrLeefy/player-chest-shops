@@ -6,13 +6,13 @@
     ]
   },
   "header": {
-    "name": "PlayerShops v2.2.1",
+    "name": "PlayerShops v2.2.2",
     "description": "player chest shops",
-    "uuid": "176608ba-f70a-4120-a71b-70a192793ab2",
+    "uuid": "023a14e7-8c1b-4a72-98c8-d8848c44a568",
     "version": [
       2,
       2,
-      1
+      2
     ],
     "min_engine_version": [
       1,
@@ -24,7 +24,7 @@
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "d25bd52a-2d2e-4366-a3d8-5766ca134aa1",
+      "uuid": "080c1471-9fa7-4354-bcc5-55d26ebb2ba6",
       "entry": "scripts/import.js",
       "version": [
         1,
@@ -34,7 +34,7 @@
     },
     {
       "type": "data",
-      "uuid": "0a0be71d-ffee-4d24-9b4d-c531f85b9cff",
+      "uuid": "0b8799d5-35d3-42fc-a742-d5081097a47d",
       "version": [
         1,
         0,
