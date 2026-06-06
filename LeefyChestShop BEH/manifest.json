@@ -6,13 +6,13 @@
 		]
 	},
 	"header": {
-		"name": "LeefyChestShop v2.2.6 BEH",
-		"description": "LeefyChestShop Behavior Pack v2.2.6 - Production Release - Jun 2026 Update",
-		"uuid": "07c9ba6b-1464-414c-b3ff-633ee27b4479",
+		"name": "LeefyChestShop v2.2.7 BEH",
+		"description": "LeefyChestShop Behavior Pack v2.2.7 - Production Release - Jun 2026 Update",
+		"uuid": "e80574dc-c4c8-4834-86ba-6165e7fde47d",
 		"version": [
 			2,
 			2,
-			6
+			7
 		],
 		"min_engine_version": [
 			1,
@@ -24,21 +24,21 @@
 		{
 			"type": "script",
 			"language": "javascript",
-			"uuid": "f866e0e3-06ea-4b2e-a6b8-fa44e9003a5b",
+			"uuid": "6258dd89-614e-4e1a-b536-2ee60c5701b3",
 			"entry": "scripts/import.js",
 			"version": [
 				2,
 				2,
-				6
+				7
 			]
 		},
 		{
 			"type": "data",
-			"uuid": "d0280bb0-eee0-470a-b54f-04ab94a02473",
+			"uuid": "ebc08eb7-96de-41c0-9d24-c843c83baf42",
 			"version": [
 				2,
 				2,
-				6
+				7
 			]
 		}
 	],

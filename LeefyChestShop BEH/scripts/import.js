@@ -695,201 +695,88 @@ function getPotionDisplayName(sellItem, forSign = false) {
   if (!locKey) {
     return sellItem.nameTag || iName(sellItem.typeId);
   }
-  if (locKey.includes("potion.effect.")) {
-    const effectName = locKey.replace("potion.effect.", "");
-    const shortEffectNames = {
-      "jump_boost": "Leaping",
-      "slowness": "Slow",
-      "swiftness": "Swift",
-      "speed": "Swift",
-      "instant_health": "Heal",
-      "healing": "Heal",
-      "instant_damage": "Harm",
-      "harming": "Harm",
-      "poison": "Poison",
-      "regeneration": "Regen",
-      "strength": "Strength",
-      "weakness": "Weak",
-      "turtle_master": "Turtle",
-      "water_breathing": "W.Breath",
-      "invisibility": "Invis",
-      "night_vision": "N.Vision",
-      "fire_resistance": "F.Resist",
-      "slow_falling": "S.Fall"
-    };
-    const fullEffectNames = {
-      "jump_boost": "Leaping",
-      "slowness": "Slowness",
-      "swiftness": "Swiftness",
-      "speed": "Swiftness",
-      "instant_health": "Healing",
-      "healing": "Healing",
-      "instant_damage": "Harming",
-      "harming": "Harming",
-      "poison": "Poison",
-      "regeneration": "Regeneration",
-      "strength": "Strength",
-      "weakness": "Weakness",
-      "turtle_master": "Turtle Master",
-      "water_breathing": "Water Breathing",
-      "invisibility": "Invisibility",
-      "night_vision": "Night Vision",
-      "fire_resistance": "Fire Resistance",
-      "slow_falling": "Slow Falling"
-    };
-    const effectNames = forSign ? shortEffectNames : fullEffectNames;
-    const properEffect = effectNames[effectName] || effectName.charAt(0).toUpperCase() + effectName.slice(1).replace(/_/g, " ");
+  const isStrong = locKey.includes(".strong");
+  const isLong = locKey.includes(".long");
+  const cleanKey = locKey.replace(/^%?potion\./, "").replace(/^effect\./, "").replace(/\.name$/, "").replace(/\.strong$/, "").replace(/\.long$/, "").replace(/\.splash$/, "").replace(/\.lingering$/, "");
+  const shortEffectNames = {
+    "jump_boost": "Leaping",
+    "slowness": "Slow",
+    "swiftness": "Swift",
+    "speed": "Swift",
+    "instant_health": "Heal",
+    "healing": "Heal",
+    "instant_damage": "Harm",
+    "harming": "Harm",
+    "poison": "Poison",
+    "regeneration": "Regen",
+    "strength": "Strength",
+    "weakness": "Weak",
+    "turtle_master": "Turtle",
+    "water_breathing": "W.Breath",
+    "invisibility": "Invis",
+    "night_vision": "N.Vision",
+    "fire_resistance": "F.Resist",
+    "slow_falling": "S.Fall"
+  };
+  const fullEffectNames = {
+    "jump_boost": "Leaping",
+    "slowness": "Slowness",
+    "swiftness": "Swiftness",
+    "speed": "Swiftness",
+    "instant_health": "Healing",
+    "healing": "Healing",
+    "instant_damage": "Harming",
+    "harming": "Harming",
+    "poison": "Poison",
+    "regeneration": "Regeneration",
+    "strength": "Strength",
+    "weakness": "Weakness",
+    "turtle_master": "Turtle Master",
+    "water_breathing": "Water Breathing",
+    "invisibility": "Invisibility",
+    "night_vision": "Night Vision",
+    "fire_resistance": "Fire Resistance",
+    "slow_falling": "Slow Falling"
+  };
+  if (cleanKey === "water") {
     if (forSign) {
-      if (sellItem.typeId === "minecraft:splash_potion") {
-        return `SP ${properEffect}`;
-      } else if (sellItem.typeId === "minecraft:lingering_potion") {
-        return `LP ${properEffect}`;
-      } else {
-        return `P ${properEffect}`;
-      }
+      return sellItem.typeId === "minecraft:potion" ? "Water Bottle" : sellItem.typeId === "minecraft:splash_potion" ? "SW Water" : "LW Water";
     } else {
-      if (sellItem.typeId === "minecraft:splash_potion") {
-        return `Splash Potion of ${properEffect}`;
-      } else if (sellItem.typeId === "minecraft:lingering_potion") {
-        return `Lingering Potion of ${properEffect}`;
-      } else {
-        return `Potion of ${properEffect}`;
-      }
+      return sellItem.typeId === "minecraft:potion" ? "Water Bottle" : sellItem.typeId === "minecraft:splash_potion" ? "Splash Water Bottle" : "Lingering Water Bottle";
     }
   }
-  if (locKey.includes("%potion.") && locKey.includes(".name")) {
-    const effectMatch = locKey.match(/%potion\.([^.]+)\./);
-    if (effectMatch) {
-      const effectName = effectMatch[1];
-      const shortEffectNames = {
-        "jump_boost": "Leaping",
-        "slowness": "Slow",
-        "swiftness": "Swift",
-        "speed": "Swift",
-        "instant_health": "Heal",
-        "healing": "Heal",
-        "instant_damage": "Harm",
-        "harming": "Harm",
-        "poison": "Poison",
-        "regeneration": "Regen",
-        "strength": "Strength",
-        "weakness": "Weak",
-        "turtle_master": "Turtle",
-        "water_breathing": "W.Breath",
-        "invisibility": "Invis",
-        "night_vision": "N.Vision",
-        "fire_resistance": "F.Resist",
-        "slow_falling": "S.Fall"
-      };
-      const fullEffectNames = {
-        "jump_boost": "Leaping",
-        "slowness": "Slowness",
-        "swiftness": "Swiftness",
-        "speed": "Swiftness",
-        "instant_health": "Healing",
-        "healing": "Healing",
-        "instant_damage": "Harming",
-        "harming": "Harming",
-        "poison": "Poison",
-        "regeneration": "Regeneration",
-        "strength": "Strength",
-        "weakness": "Weakness",
-        "turtle_master": "Turtle Master",
-        "water_breathing": "Water Breathing",
-        "invisibility": "Invisibility",
-        "night_vision": "Night Vision",
-        "fire_resistance": "Fire Resistance",
-        "slow_falling": "Slow Falling"
-      };
-      const effectNames = forSign ? shortEffectNames : fullEffectNames;
-      const properEffect = effectNames[effectName] || effectName.charAt(0).toUpperCase() + effectName.slice(1).replace(/_/g, " ");
-      if (forSign) {
-        if (sellItem.typeId === "minecraft:splash_potion") {
-          return `SP ${properEffect}`;
-        } else if (sellItem.typeId === "minecraft:lingering_potion") {
-          return `LP ${properEffect}`;
-        } else {
-          return `P ${properEffect}`;
-        }
-      } else {
-        if (sellItem.typeId === "minecraft:splash_potion") {
-          return `Splash Potion of ${properEffect}`;
-        } else if (sellItem.typeId === "minecraft:lingering_potion") {
-          return `Lingering Potion of ${properEffect}`;
-        } else {
-          return `Potion of ${properEffect}`;
-        }
-      }
-    }
-  }
-  if (locKey === "potion.water") {
+  if (cleanKey === "awkward") {
     if (forSign) {
-      if (sellItem.typeId === "minecraft:potion") {
-        return "Water Bottle";
-      } else if (sellItem.typeId === "minecraft:splash_potion") {
-        return "SW Water";
-      } else if (sellItem.typeId === "minecraft:lingering_potion") {
-        return "LW Water";
-      }
+      return sellItem.typeId === "minecraft:potion" ? "Awkward Potion" : sellItem.typeId === "minecraft:splash_potion" ? "SA Awkward" : "LA Awkward";
     } else {
-      if (sellItem.typeId === "minecraft:potion") {
-        return "Water Bottle";
-      } else if (sellItem.typeId === "minecraft:splash_potion") {
-        return "Splash Water Bottle";
-      } else if (sellItem.typeId === "minecraft:lingering_potion") {
-        return "Lingering Water Bottle";
-      }
+      return sellItem.typeId === "minecraft:potion" ? "Awkward Potion" : sellItem.typeId === "minecraft:splash_potion" ? "Splash Awkward Potion" : "Lingering Awkward Potion";
     }
   }
-  if (locKey === "potion.awkward") {
-    if (forSign) {
-      if (sellItem.typeId === "minecraft:splash_potion") {
-        return "SA Awkward";
-      } else if (sellItem.typeId === "minecraft:lingering_potion") {
-        return "LA Awkward";
-      } else {
-        return "Awkward Potion";
-      }
-    } else {
-      if (sellItem.typeId === "minecraft:splash_potion") {
-        return "Splash Awkward Potion";
-      } else if (sellItem.typeId === "minecraft:lingering_potion") {
-        return "Lingering Awkward Potion";
-      } else {
-        return "Awkward Potion";
-      }
-    }
+  if (cleanKey === "thick") {
+    return forSign ? sellItem.typeId === "minecraft:potion" ? "Thick Potion" : sellItem.typeId === "minecraft:splash_potion" ? "S.Thick" : "L.Thick" : "Thick Potion";
   }
-  if (locKey === "potion.thick") {
-    if (sellItem.typeId === "minecraft:splash_potion") {
-      return "S.Thick";
-    } else if (sellItem.typeId === "minecraft:lingering_potion") {
-      return "L.Thick";
-    } else {
-      return "Thick Potion";
-    }
+  if (cleanKey === "mundane") {
+    return forSign ? sellItem.typeId === "minecraft:potion" ? "Mundane Potion" : sellItem.typeId === "minecraft:splash_potion" ? "S.Mundane" : "L.Mundane" : "Mundane Potion";
   }
-  if (locKey === "potion.mundane") {
-    if (sellItem.typeId === "minecraft:splash_potion") {
-      return "S.Mundane";
-    } else if (sellItem.typeId === "minecraft:lingering_potion") {
-      return "L.Mundane";
-    } else {
-      return "Mundane Potion";
-    }
+  const effectNames = forSign ? shortEffectNames : fullEffectNames;
+  const baseEffect = effectNames[cleanKey] || cleanKey.charAt(0).toUpperCase() + cleanKey.slice(1).replace(/_/g, " ");
+  let displayName = "";
+  if (forSign) {
+    const prefix = sellItem.typeId === "minecraft:splash_potion" ? "SP" : sellItem.typeId === "minecraft:lingering_potion" ? "LP" : "P";
+    displayName = `${prefix} ${baseEffect}`;
+    if (isStrong)
+      displayName += " II";
+    if (isLong)
+      displayName += "+";
+  } else {
+    const containerName = sellItem.typeId === "minecraft:splash_potion" ? "Splash Potion of" : sellItem.typeId === "minecraft:lingering_potion" ? "Lingering Potion of" : "Potion of";
+    displayName = `${containerName} ${baseEffect}`;
+    if (isStrong)
+      displayName += " II";
+    if (isLong)
+      displayName += " (Long)";
   }
-  if (locKey.includes("potion.")) {
-    const potionType = locKey.replace("potion.", "");
-    const capitalizedType = potionType.charAt(0).toUpperCase() + potionType.slice(1).replace(/_/g, " ");
-    if (sellItem.typeId === "minecraft:splash_potion") {
-      return `S.${capitalizedType}`;
-    } else if (sellItem.typeId === "minecraft:lingering_potion") {
-      return `L.${capitalizedType}`;
-    } else {
-      return `P.${capitalizedType}`;
-    }
-  }
-  return sellItem.nameTag || iName(sellItem.typeId);
+  return displayName;
 }
 function processItems(container) {
   let sellItem = void 0;
@@ -919,13 +806,18 @@ function processItems(container) {
   let itemName = "";
   const sellLocKey = sellItem.localizationKey;
   if (sellItem.typeId === "minecraft:arrow") {
-    if (sellLocKey && sellLocKey.includes("tipped_arrow.effect.")) {
-      const effectName = sellLocKey.replace("tipped_arrow.effect.", "");
-      const mappedName = tippedArrowMapping[effectName];
-      if (mappedName) {
-        itemName = mappedName;
+    if (sellLocKey && (sellLocKey.includes("tipped_arrow") || sellLocKey.includes("effect"))) {
+      const isStrong = sellLocKey.includes(".strong");
+      const isLong = sellLocKey.includes(".long");
+      const cleanEffect = sellLocKey.replace(/^%?item\.tipped_arrow\.effect\./, "").replace(/^%?tipped_arrow\.effect\./, "").replace(/\.name$/, "").replace(/\.strong$/, "").replace(/\.long$/, "");
+      const mappedName = tippedArrowMapping[cleanEffect];
+      const baseName = mappedName || `Arrow of ${cleanEffect.charAt(0).toUpperCase() + cleanEffect.slice(1).replace(/_/g, " ")}`;
+      if (isStrong) {
+        itemName = `${baseName} II`;
+      } else if (isLong) {
+        itemName = `${baseName} (Long)`;
       } else {
-        itemName = `Arrow of ${effectName.charAt(0).toUpperCase() + effectName.slice(1).replace(/_/g, " ")}`;
+        itemName = baseName;
       }
     } else if (sellItem.nameTag) {
       itemName = sellItem.nameTag;
