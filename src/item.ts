@@ -43,6 +43,57 @@ export function areItemsIdentical(item1: ItemStack | undefined, item2: ItemStack
     const lore2 = item2.getLore()?.join('\n') ?? '';
     if (lore1 !== lore2) return false;
 
+    // Durability check (damage must match strictly)
+    const dur1 = item1.getComponent('minecraft:durability') as any;
+    const dur2 = item2.getComponent('minecraft:durability') as any;
+    if (dur1 || dur2) {
+        if (!dur1 || !dur2) return false;
+        if (dur1.damage !== dur2.damage) return false;
+    }
+
+    // Dyeable check (dyed leather armor RGB color matching)
+    const dye1 = item1.getComponent('minecraft:dyeable') as any;
+    const dye2 = item2.getComponent('minecraft:dyeable') as any;
+    if (dye1 || dye2) {
+        if (!dye1 || !dye2) return false;
+        const c1 = dye1.color;
+        const c2 = dye2.color;
+        if (!c1 || !c2) return false;
+        if (c1.red !== c2.red || c1.green !== c2.green || c1.blue !== c2.blue) return false;
+    }
+
+    // Ominous bottle amplifier check
+    const amp1 = item1.getComponent('minecraft:ominous_bottle_amplifier') as any;
+    const amp2 = item2.getComponent('minecraft:ominous_bottle_amplifier') as any;
+    if (amp1 || amp2) {
+        if (!amp1 || !amp2) return false;
+        if (amp1.amplifier !== amp2.amplifier) return false;
+    }
+
+    // Book content check (written books contents, page counts, author, signature)
+    const book1 = item1.getComponent('minecraft:book') as any;
+    const book2 = item2.getComponent('minecraft:book') as any;
+    if (book1 || book2) {
+        if (!book1 || !book2) return false;
+        if (book1.isSigned !== book2.isSigned) return false;
+        if (book1.author !== book2.author) return false;
+        if (book1.pageCount !== book2.pageCount) return false;
+        const contents1 = book1.contents ?? [];
+        const contents2 = book2.contents ?? [];
+        if (contents1.length !== contents2.length) return false;
+        for (let i = 0; i < contents1.length; i++) {
+            if (contents1[i] !== contents2[i]) return false;
+        }
+    }
+
+    // Dynamic properties check (for custom addon metadata)
+    const keys1 = item1.getDynamicPropertyIds();
+    const keys2 = item2.getDynamicPropertyIds();
+    if (keys1.length !== keys2.length) return false;
+    for (const key of keys1) {
+        if (item1.getDynamicProperty(key) !== item2.getDynamicProperty(key)) return false;
+    }
+
     const enchantComponent1 = item1.getComponent('enchantable') as any;
     const enchantComponent2 = item2.getComponent('enchantable') as any;
     const enchants1 = enchantComponent1?.getEnchantments() ?? [];
@@ -195,6 +246,14 @@ export function processItems(container: Container): ProcessedItemResult | { erro
 
     if (!sellItem) {
         return { error: "SHOP EMPTY" };
+    }
+
+    if (sellItem.typeId.includes('shulker_box')) {
+        return { error: "SHULKER BOXES CANNOT BE SOLD" };
+    }
+
+    if (sellItem.typeId === 'minecraft:filled_map') {
+        return { error: "FILLED MAPS CANNOT BE SOLD" };
     }
 
     for (let i = 0; i < container.size; i++) {

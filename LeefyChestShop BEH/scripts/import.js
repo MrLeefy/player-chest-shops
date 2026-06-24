@@ -10,7 +10,36 @@ var config = {
   shopLimit: 500,
   adminTag: "admin",
   signConfig: [
-    "[shop]"
+    "[shop]",
+    "shop",
+    "[buy]",
+    "buy",
+    "[sell]",
+    "sell",
+    "[chestshop]",
+    "chestshop",
+    "[cshop]",
+    "cshop",
+    "[store]",
+    "store",
+    "[market]",
+    "market",
+    "[trade]",
+    "trade",
+    "[chest shop]",
+    "chest shop",
+    "[deal]",
+    "deal",
+    "[merchant]",
+    "merchant",
+    "[sales]",
+    "sales",
+    "[items]",
+    "items",
+    "[selling]",
+    "selling",
+    "[buying]",
+    "buying"
   ],
   containers: [
     "minecraft:chest",
@@ -677,6 +706,62 @@ function areItemsIdentical(item1, item2) {
   const lore2 = item2.getLore()?.join("\n") ?? "";
   if (lore1 !== lore2)
     return false;
+  const dur1 = item1.getComponent("minecraft:durability");
+  const dur2 = item2.getComponent("minecraft:durability");
+  if (dur1 || dur2) {
+    if (!dur1 || !dur2)
+      return false;
+    if (dur1.damage !== dur2.damage)
+      return false;
+  }
+  const dye1 = item1.getComponent("minecraft:dyeable");
+  const dye2 = item2.getComponent("minecraft:dyeable");
+  if (dye1 || dye2) {
+    if (!dye1 || !dye2)
+      return false;
+    const c1 = dye1.color;
+    const c2 = dye2.color;
+    if (!c1 || !c2)
+      return false;
+    if (c1.red !== c2.red || c1.green !== c2.green || c1.blue !== c2.blue)
+      return false;
+  }
+  const amp1 = item1.getComponent("minecraft:ominous_bottle_amplifier");
+  const amp2 = item2.getComponent("minecraft:ominous_bottle_amplifier");
+  if (amp1 || amp2) {
+    if (!amp1 || !amp2)
+      return false;
+    if (amp1.amplifier !== amp2.amplifier)
+      return false;
+  }
+  const book1 = item1.getComponent("minecraft:book");
+  const book2 = item2.getComponent("minecraft:book");
+  if (book1 || book2) {
+    if (!book1 || !book2)
+      return false;
+    if (book1.isSigned !== book2.isSigned)
+      return false;
+    if (book1.author !== book2.author)
+      return false;
+    if (book1.pageCount !== book2.pageCount)
+      return false;
+    const contents1 = book1.contents ?? [];
+    const contents2 = book2.contents ?? [];
+    if (contents1.length !== contents2.length)
+      return false;
+    for (let i = 0; i < contents1.length; i++) {
+      if (contents1[i] !== contents2[i])
+        return false;
+    }
+  }
+  const keys1 = item1.getDynamicPropertyIds();
+  const keys2 = item2.getDynamicPropertyIds();
+  if (keys1.length !== keys2.length)
+    return false;
+  for (const key of keys1) {
+    if (item1.getDynamicProperty(key) !== item2.getDynamicProperty(key))
+      return false;
+  }
   const enchantComponent1 = item1.getComponent("enchantable");
   const enchantComponent2 = item2.getComponent("enchantable");
   const enchants1 = enchantComponent1?.getEnchantments() ?? [];
@@ -790,6 +875,12 @@ function processItems(container) {
   }
   if (!sellItem) {
     return { error: "SHOP EMPTY" };
+  }
+  if (sellItem.typeId.includes("shulker_box")) {
+    return { error: "SHULKER BOXES CANNOT BE SOLD" };
+  }
+  if (sellItem.typeId === "minecraft:filled_map") {
+    return { error: "FILLED MAPS CANNOT BE SOLD" };
   }
   for (let i = 0; i < container.size; i++) {
     const item = container.getItem(i);

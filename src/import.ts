@@ -89,3 +89,4 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     }, 80);
 });
 
+
