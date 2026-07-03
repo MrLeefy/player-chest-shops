@@ -1,0 +1,6 @@
+node_modules/
+old_js_backup/
+.DS_Store
+*.mcaddon
+obfuscate.js
+

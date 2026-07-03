@@ -1,0 +1,76 @@
+name: Compile Addon
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.mcaddon'
+      - 'README.md'
+      - '.github/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Create .mcaddon File
+        run: |
+          node bump-manifests.js
+          VERSION=$(jq -r '.header.version | join(".")' "LeefyChestShop BEH/manifest.json")
+          cd "LeefyChestShop BEH" && zip -r ../LeefyChestShopBEH_$VERSION.mcpack * && cd ..
+          cd "LeefyChestShop RES" && zip -r ../LeefyChestShopRES_$VERSION.mcpack * && cd ..
+          zip -j leefychestshop_$VERSION.mcaddon LeefyChestShopBEH_$VERSION.mcpack LeefyChestShopRES_$VERSION.mcpack
+          rm LeefyChestShopBEH_$VERSION.mcpack LeefyChestShopRES_$VERSION.mcpack
+          
+          mkdir -p docs
+          cat << EOF > docs/index.html
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+            <meta http-equiv="Pragma" content="no-cache">
+            <meta http-equiv="Expires" content="0">
+            <title>Redirecting...</title>
+          </head>
+          <body>
+            <script>
+              window.location.replace("https://github.com/${{ github.repository }}/raw/main/leefychestshop_" + "$VERSION" + ".mcaddon?t=" + Date.now());
+            </script>
+            Redirecting to latest release...
+          </body>
+          </html>
+          EOF
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git rm --cached "leefychestshop_*.mcaddon" || true
+          git add -f leefychestshop_*.mcaddon
+          git add -f docs/index.html
+          git add "LeefyChestShop BEH/manifest.json" "LeefyChestShop RES/manifest.json" package.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: auto-bump version and generate new UUIDs [skip ci]"
+            git push origin main
+          else
+            echo "No changes to the compiled addon."
+          fi

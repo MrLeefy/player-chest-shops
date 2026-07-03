@@ -1,0 +1,18 @@
+{
+  "name": "player-chest-shops",
+  "version": "2.2.12",
+  "description": "Secure Player Chest Shops addon for Minecraft Bedrock using Script API",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/import.ts --bundle --minify --format=esm --external:@minecraft/server --external:@minecraft/server-ui --outfile=\"LeefyChestShop BEH/scripts/import.js\" && node obfuscate.js",
+    "dev": "esbuild src/import.ts --bundle --minify --format=esm --external:@minecraft/server --external:@minecraft/server-ui --outfile=\"LeefyChestShop BEH/scripts/import.js\" --watch"
+  },
+  "devDependencies": {
+    "@minecraft/server": "1.12.0",
+    "@minecraft/server-ui": "1.2.0",
+    "esbuild": "^0.20.0",
+    "javascript-obfuscator": "^5.4.3",
+    "typescript": "^5.0.0"
+  }
+}

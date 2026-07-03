@@ -1,0 +1,55 @@
+{
+	"format_version": 2,
+	"metadata": {
+		"authors": [
+			"mrleefy"
+		]
+	},
+	"header": {
+		"name": "LeefyChestShop v2.2.12 BEH",
+		"description": "LeefyChestShop Behavior Pack v2.2.12 - Production Release - Jun 2026 Update",
+		"uuid": "ecb15eb3-edd1-4d29-848c-afad069e5d67",
+		"version": [
+			2,
+			2,
+			12
+		],
+		"min_engine_version": [
+			1,
+			21,
+			0
+		]
+	},
+	"modules": [
+		{
+			"type": "script",
+			"language": "javascript",
+			"uuid": "6d218458-1a51-4ebf-b7b0-07b1945cb50c",
+			"entry": "scripts/import.js",
+			"version": [
+				2,
+				2,
+				12
+			]
+		},
+		{
+			"type": "data",
+			"uuid": "30afd69e-4daa-4ad8-8160-d74a0acab6ad",
+			"version": [
+				2,
+				2,
+				12
+			]
+		}
+	],
+	"dependencies": [
+		{
+			"module_name": "@minecraft/server",
+			"version": "1.12.0"
+		},
+		{
+			"module_name": "@minecraft/server-ui",
+			"version": "1.2.0"
+		}
+	]
+}
