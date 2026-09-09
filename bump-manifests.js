@@ -64,10 +64,9 @@ resources.header = {
   version,
   min_engine_version: MIN_ENGINE_VERSION,
 };
-// Keep the resource module UUID stable to preserve existing texture-pack identity,
-// while ensuring its version matches the release.
 resources.modules = (resources.modules ?? []).map((module) => ({
   ...module,
+  uuid: randomUUID(),
   version,
 }));
 resources.dependencies = (resources.dependencies ?? []).map((dependency) => {
