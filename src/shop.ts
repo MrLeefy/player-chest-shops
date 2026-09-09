@@ -15,7 +15,7 @@ const protectedBlockTypes = new Set<string>(config.containers);
 function createAndShowModalForm(player: Player, title: string, textFieldPrompt: string, textFieldPlaceholder: string, defaultValue = '10') {
     const form = new ModalFormData()
         .title(title)
-        .textField(textFieldPrompt, textFieldPlaceholder, defaultValue);
+        .textField(textFieldPrompt, textFieldPlaceholder, { defaultValue });
     return form.show(player);
 }
 
@@ -521,7 +521,7 @@ function displayItemInfoAboveChest(player: Player, item: ItemStack) {
                                 formText += ` §7Lore:§r\n${itemLore}\n\n`;
                             }
                             formText += ` §7Stock Left:§r ${itemAmount}x\n\n §7price each:§r ${split[2]}\n\nHow many do you want to buy?`;
-                            buy.textField(formText, 'Type amount here', '1');
+                            buy.textField(formText, 'Type amount here', { defaultValue: '1' });
                             
                             const buyResponse = await buy.show(player);
                             if (buyResponse.canceled || !buyResponse.formValues) return;
