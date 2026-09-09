@@ -6,18 +6,18 @@
 		]
 	},
 	"header": {
-		"name": "LeefyChestShop v2.2.12 RES",
-		"description": "LeefyChestShop Resource Pack v2.2.12 - Production Release - Jun 2026 Update",
-		"uuid": "5764a741-7584-4830-a98c-7d98e12e55f5",
+		"name": "LeefyChestShop v2.2.13 RES",
+		"description": "LeefyChestShop Resource Pack v2.2.13 - Stable Bedrock 26.40-26.45 compatibility - Sep 2026",
+		"uuid": "18bf81d5-bca1-49c7-bac9-2ceed81f1b07",
 		"version": [
 			2,
 			2,
-			12
+			13
 		],
 		"min_engine_version": [
 			1,
-			21,
-			0
+			26,
+			40
 		]
 	},
 	"modules": [
@@ -27,7 +27,7 @@
 			"version": [
 				2,
 				2,
-				11
+				13
 			]
 		}
 	]
