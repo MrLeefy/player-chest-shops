@@ -61,7 +61,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     // Delay execution by 80 ticks (4 seconds) to allow network profile/identity to resolve
     system.runTimeout(() => {
         try {
-            if (!player.isValid()) return;
+            if (!player.isValid) return;
             
             // Set default rank shop limit if not set
             setScore(player, 'rank', config.shopLimit);
@@ -77,7 +77,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
                 resetScore(fP, config.currency);
                 
                 setTimeout(() => {
-                    if (player.isValid()) {
+                    if (player.isValid) {
                         player.sendMessage(` §7§oYou earned §e${config.currencySymbol}§f${add.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')} §7from your shops while you were away!§r`);
                         player.playSound('random.levelup', { pitch: 2 });
                     }

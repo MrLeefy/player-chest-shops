@@ -99,7 +99,7 @@ type ChangeActionType = typeof ChangeAction[keyof typeof ChangeAction];
 
 function run(thisClass: ScoreboardDatabaseManager, key: string, value: any, action: ChangeActionType): void {
     // 1. Verify self-healing: if scoreboard is invalid, trigger rebuild and abort
-    if (!thisClass._scoreboard_ || !thisClass._scoreboard_.isValid()) {
+    if (!thisClass._scoreboard_ || !thisClass._scoreboard_.isValid) {
         console.warn(`Database objective "${thisClass._nameId_}" was lost or invalid! Rebuilding...`);
         thisClass.rebuild();
         return; // Rebuild will write everything, including this pending change
@@ -229,7 +229,7 @@ class ScoreboardDatabaseManager extends Map<string, any> {
     
     // Lightweight self-healing audit on reads
     _assertObjectiveValid(): void {
-        if (!this._scoreboard_ || !this._scoreboard_.isValid()) {
+        if (!this._scoreboard_ || !this._scoreboard_.isValid) {
             console.warn(`[Database] Read audit failed! Objective "${this._nameId_}" was lost. Recovering...`);
             this.rebuild();
         }
@@ -458,7 +458,7 @@ class ScoreboardDatabaseManager extends Map<string, any> {
     }
 
     rebuild(): this {
-        if (this.objective?.isValid()) return this;
+        if (this.objective?.isValid) return this;
 
         try {
             const entries = Array.from(super.entries());

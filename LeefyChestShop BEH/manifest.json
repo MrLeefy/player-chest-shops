@@ -6,50 +6,50 @@
 		]
 	},
 	"header": {
-		"name": "LeefyChestShop v2.2.12 BEH",
-		"description": "LeefyChestShop Behavior Pack v2.2.12 - Production Release - Jun 2026 Update",
-		"uuid": "ecb15eb3-edd1-4d29-848c-afad069e5d67",
+		"name": "LeefyChestShop v2.2.13 BEH",
+		"description": "LeefyChestShop Behavior Pack v2.2.13 - Stable Bedrock 26.40-26.45 compatibility - Sep 2026",
+		"uuid": "04f160c9-14bb-4006-98f8-ddc782cdd79d",
 		"version": [
 			2,
 			2,
-			12
+			13
 		],
 		"min_engine_version": [
 			1,
-			21,
-			0
+			26,
+			40
 		]
 	},
 	"modules": [
 		{
 			"type": "script",
 			"language": "javascript",
-			"uuid": "6d218458-1a51-4ebf-b7b0-07b1945cb50c",
+			"uuid": "4cd80f8e-3542-413e-a12a-c982f98b2517",
 			"entry": "scripts/import.js",
 			"version": [
 				2,
 				2,
-				12
+				13
 			]
 		},
 		{
 			"type": "data",
-			"uuid": "30afd69e-4daa-4ad8-8160-d74a0acab6ad",
+			"uuid": "80e094df-0f14-4f94-bb87-3791a65bfab7",
 			"version": [
 				2,
 				2,
-				12
+				13
 			]
 		}
 	],
 	"dependencies": [
 		{
 			"module_name": "@minecraft/server",
-			"version": "1.12.0"
+			"version": "2.9.0"
 		},
 		{
 			"module_name": "@minecraft/server-ui",
-			"version": "1.2.0"
+			"version": "2.1.0"
 		}
 	]
 }

@@ -1,76 +1,130 @@
 name: Compile Addon
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
     paths-ignore:
-      - '**.mcaddon'
-      - 'README.md'
-      - '.github/**'
+      - "**.mcaddon"
+      - "docs/index.html"
+      - "README.md"
+      - ".github/**"
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: compile-addon-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
+      - name: Checkout repository branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 24
+          cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
-      - name: Build TypeScript
+      - name: Apply stable Script API migration
+        run: npm run migrate:api
+
+      - name: Validate manifests
+        run: npm run validate
+
+      - name: Type-check TypeScript
+        run: npm run typecheck
+
+      - name: Build production script
         run: npm run build
 
-      - name: Create .mcaddon File
+      - name: Create .mcaddon file
         run: |
-          node bump-manifests.js
-          VERSION=$(jq -r '.header.version | join(".")' "LeefyChestShop BEH/manifest.json")
-          cd "LeefyChestShop BEH" && zip -r ../LeefyChestShopBEH_$VERSION.mcpack * && cd ..
-          cd "LeefyChestShop RES" && zip -r ../LeefyChestShopRES_$VERSION.mcpack * && cd ..
-          zip -j leefychestshop_$VERSION.mcaddon LeefyChestShopBEH_$VERSION.mcpack LeefyChestShopRES_$VERSION.mcpack
-          rm LeefyChestShopBEH_$VERSION.mcpack LeefyChestShopRES_$VERSION.mcpack
-          
+          VERSION=$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync("LeefyChestShop BEH/manifest.json","utf8")); process.stdout.write(m.header.version.join("."));')
+          echo "ADDON_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+          rm -f LeefyChestShopBEH_*.mcpack LeefyChestShopRES_*.mcpack
+          (
+            cd "LeefyChestShop BEH"
+            zip -q -r "../LeefyChestShopBEH_$VERSION.mcpack" .
+          )
+          (
+            cd "LeefyChestShop RES"
+            zip -q -r "../LeefyChestShopRES_$VERSION.mcpack" .
+          )
+          zip -q -j "leefychestshop_$VERSION.mcaddon" \
+            "LeefyChestShopBEH_$VERSION.mcpack" \
+            "LeefyChestShopRES_$VERSION.mcpack"
+          rm -f "LeefyChestShopBEH_$VERSION.mcpack" "LeefyChestShopRES_$VERSION.mcpack"
+
           mkdir -p docs
-          cat << EOF > docs/index.html
+          cat > docs/index.html <<EOF
           <!DOCTYPE html>
           <html>
           <head>
             <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
             <meta http-equiv="Pragma" content="no-cache">
             <meta http-equiv="Expires" content="0">
-            <title>Redirecting...</title>
+            <title>LeefyChestShop Download</title>
           </head>
           <body>
             <script>
-              window.location.replace("https://github.com/${{ github.repository }}/raw/main/leefychestshop_" + "$VERSION" + ".mcaddon?t=" + Date.now());
+              window.location.replace("https://github.com/${{ github.repository }}/raw/main/leefychestshop_$VERSION.mcaddon?t=" + Date.now());
             </script>
-            Redirecting to latest release...
+            Redirecting to the latest LeefyChestShop release...
           </body>
           </html>
           EOF
 
-      - name: Commit and Push
+      - name: Upload compiled addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: LeefyChestShop-${{ env.ADDON_VERSION }}
+          path: leefychestshop_${{ env.ADDON_VERSION }}.mcaddon
+          if-no-files-found: error
+
+      - name: Commit migrated sources to PR branch
+        if: github.event_name == 'pull_request'
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git rm --cached "leefychestshop_*.mcaddon" || true
-          git add -f leefychestshop_*.mcaddon
-          git add -f docs/index.html
-          git add "LeefyChestShop BEH/manifest.json" "LeefyChestShop RES/manifest.json" package.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json src
+
           if ! git diff --cached --quiet; then
-            git commit -m "chore: auto-bump version and generate new UUIDs [skip ci]"
-            git push origin main
+            git commit -m "fix: migrate ChestShop source to Script API 2.x"
+            git push origin "HEAD:${{ github.head_ref }}"
           else
-            echo "No changes to the compiled addon."
+            echo "Source and lockfile are already current."
+          fi
+
+      - name: Commit production build
+        if: github.event_name != 'pull_request'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add package-lock.json src
+          git add "LeefyChestShop BEH/scripts/import.js"
+          git add docs/index.html
+          git add -f "leefychestshop_${ADDON_VERSION}.mcaddon"
+
+          if ! git diff --cached --quiet; then
+            git commit -m "build: publish LeefyChestShop v${ADDON_VERSION} [skip ci]"
+            git push origin HEAD:main
+          else
+            echo "Production build is already current."
           fi
